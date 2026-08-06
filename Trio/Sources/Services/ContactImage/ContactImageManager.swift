@@ -2,6 +2,7 @@ import Combine
 import Contacts
 import CoreData
 import Swinject
+import UIKit
 
 protocol ContactImageManagerDelegate: AnyObject {
     func contactImageManagerDidUpdateState(_ state: ContactImageState)
@@ -24,6 +25,48 @@ final class BaseContactImageManager: NSObject, ContactImageManager, Injectable {
     @Injected() private var settingsManager: SettingsManager!
     @Injected() private var fileStorage: FileStorage!
     @Injected() private var iobService: IOBService!
+    @Injected() private var apsManager: APSManager!
+
+    /// Time-derived visual state that changes even when no new data arrives: the
+    /// loop-ring staleness band (green/yellow/red) and whether the CGM reading is
+    /// stale (muted grey). Used to decide when a periodic refresh actually changes
+    /// the rendered image, so the timer can skip redundant contact-store writes.
+    private struct RenderStaleness: Equatable {
+        enum LoopBand {
+            case noLoop // no loop date yet -> gray
+            case fresh // <= 5 min -> green
+            case warning // <= 10 min -> yellow
+            case stale // > 10 min -> red
+        }
+
+        let loopBand: LoopBand
+        /// Glucose staleness band (fresh / warning / urgent) drives the strike-through
+        /// colour, so the periodic refresh must re-render when it changes too.
+        let glucoseStaleness: ContactPicture.GlucoseStaleness
+
+        /// Must match `ContactPicture.Config.lag`.
+        private static let loopLag: TimeInterval = 30
+
+        static func current(for state: ContactImageState, now: Date = Date()) -> RenderStaleness {
+            let loopBand: LoopBand
+            if let lastLoopDate = state.lastLoopDate {
+                let delta = now.timeIntervalSince(lastLoopDate) - loopLag
+                if delta <= 5.minutes.timeInterval {
+                    loopBand = .fresh
+                } else if delta <= 10.minutes.timeInterval {
+                    loopBand = .warning
+                } else {
+                    loopBand = .stale
+                }
+            } else {
+                loopBand = .noLoop
+            }
+
+            let glucoseStaleness = ContactPicture.GlucoseStaleness.classify(glucoseDate: state.glucoseDate, now: now)
+
+            return RenderStaleness(loopBand: loopBand, glucoseStaleness: glucoseStaleness)
+        }
+    }
 
     private let contactStore = CNContactStore()
 
@@ -36,6 +79,31 @@ final class BaseContactImageManager: NSObject, ContactImageManager, Injectable {
     private let queue = DispatchQueue(label: "BaseContactImageManager.queue", qos: .background)
     private var coreDataPublisher: AnyPublisher<Set<NSManagedObjectID>, Never>?
     private var subscriptions = Set<AnyCancellable>()
+
+    /// Periodic timer that re-renders contact images purely so staleness advances
+    /// (green -> yellow -> red) when no new glucose / IOB / determination arrives.
+    private let staleRefreshTimer = DispatchTimer(timeInterval: 60)
+
+    /// The staleness last written to the contact store, so the timer can skip
+    /// redundant `CNSaveRequest`s while the rendered result would be unchanged.
+    private var lastRenderedStaleness: RenderStaleness?
+
+    /// What a queued render is allowed to skip.
+    private enum RenderRequest {
+        /// New data arrived — render and write to the contact store unconditionally.
+        case full
+        /// Staleness timer tick — skip the write if the staleness band is unchanged.
+        case stalenessOnly
+    }
+
+    /// The render waiting to run behind the one currently executing, if any.
+    /// Requests arriving while one is queued coalesce into it instead of piling
+    /// up further renders. Main-actor access only.
+    private var queuedRenderRequest: RenderRequest?
+
+    /// Tail of the serial render chain; every new render awaits the previous one,
+    /// so at most one render executes at a time. Main-actor access only.
+    private var renderTask: Task<Void, Never>?
 
     private var units: GlucoseUnits = .mgdL
 
@@ -60,41 +128,152 @@ final class BaseContactImageManager: NSObject, ContactImageManager, Injectable {
                 .share()
                 .eraseToAnyPublisher()
 
-        glucoseStorage.updatePublisher
-            .receive(on: DispatchQueue.global(qos: .background))
-            .sink { [weak self] _ in
-                guard let self = self else { return }
-                Task {
-                    await self.updateContactImageState()
-                    await self.updateContactImages()
-                }
-            }
-            .store(in: &subscriptions)
-
-        iobService.iobPublisher
-            .receive(on: DispatchQueue.global(qos: .background))
-            .sink { [weak self] _ in
-                guard let self = self else { return }
-                Task {
-                    await self.updateContactImageState()
-                    await self.updateContactImages()
-                }
-            }
-            .store(in: &subscriptions)
-
-        registerHandlers()
+        registerRenderTriggers()
+        startStaleRefreshTimer()
+        registerForegroundRefresh()
     }
 
-    // MARK: - Core Data observation
+    // MARK: - Render triggers
 
-    private func registerHandlers() {
-        coreDataPublisher?.filteredByEntityName("OrefDetermination").sink { [weak self] _ in
+    /// Subscribes the render pipeline to every data signal that should refresh
+    /// the contact images.
+    ///
+    /// A single loop cycle emits all of these within a second or two: new glucose
+    /// kicks the loop, which then publishes a loop date (the same signal the app's
+    /// loop pill uses — it also fires in open loop, where the determination's
+    /// `timestamp` is never stamped), a new determination and an IOB update. They
+    /// are merged and debounced into one render per burst instead of four racing
+    /// ones, so the render also sees the fully settled state (glucose + loop date
+    /// + COB + IOB) rather than whichever slice happened to arrive first.
+    private func registerRenderTriggers() {
+        let determinationUpdates: AnyPublisher<Void, Never> = coreDataPublisher?
+            .filteredByEntityName("OrefDetermination")
+            .map { _ in () }
+            .eraseToAnyPublisher() ?? Empty().eraseToAnyPublisher()
+
+        Publishers.MergeMany(
+            glucoseStorage.updatePublisher.eraseToAnyPublisher(),
+            iobService.iobPublisher.map { _ in () }.eraseToAnyPublisher(),
+            apsManager.lastLoopDateSubject.map { _ in () }.eraseToAnyPublisher(),
+            determinationUpdates
+        )
+        .debounce(for: .seconds(1), scheduler: queue)
+        .sink { [weak self] in
+            self?.enqueueRender(.full)
+        }
+        .store(in: &subscriptions)
+    }
+
+    // MARK: - Foreground refresh
+
+    /// Re-renders contact images when the app becomes active.
+    ///
+    /// The event-driven publishers and the stale-refresh timer only run while the app
+    /// is executing; once Trio is suspended the contact image freezes on its last
+    /// render, so the value the user sees in Contacts / on a call screen can be stale
+    /// even while the app's own loop is healthy. Refreshing on `didBecomeActive`
+    /// guarantees the image reflects current data every time the user returns to Trio,
+    /// mirroring the Live Activity's foreground refresh.
+    private func registerForegroundRefresh() {
+        Foundation.NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            // Unconditional full render so returning to the app always repairs
+            // whatever the contact store currently holds.
+            self?.enqueueRender(.full)
+        }
+    }
+
+    // MARK: - Time-driven staleness refresh
+
+    /// Starts the periodic timer that re-renders contact images when data goes stale.
+    ///
+    /// The event-driven publishers (glucose / IOB / determination) only fire when *new*
+    /// data arrives. When the CGM or loop stalls, none of them fire, so the contact image
+    /// would otherwise stay frozen on the last-rendered values. This timer advances the
+    /// loop-ring color (green -> yellow -> red) and mutes the glucose value once it goes
+    /// stale, but only writes to the contact store when the rendered result actually
+    /// changes, to avoid hammering `CNContactStore` every tick.
+    private func startStaleRefreshTimer() {
+        staleRefreshTimer.eventHandler = { [weak self] in
             guard let self = self else { return }
             Task {
-                await self.updateContactImageState()
-                await self.updateContactImages()
+                // Cheap pre-check so a tick with an unchanged staleness band doesn't
+                // enqueue a render (and its Core Data fetches) every 60 s. The
+                // serialized render re-checks this authoritatively after refreshing
+                // the state, so a stale pre-check here can never bake wrong data.
+                let bandChanged = await MainActor.run {
+                    RenderStaleness.current(for: self.state) != self.lastRenderedStaleness
+                }
+                guard bandChanged else { return }
+                self.enqueueRender(.stalenessOnly)
             }
-        }.store(in: &subscriptions)
+        }
+        staleRefreshTimer.resume()
+    }
+
+    // MARK: - Serialized render pipeline
+
+    /// Enqueues a re-render of all contact images.
+    ///
+    /// Every trigger (data events, staleness timer, foreground activation) funnels
+    /// through here so that only one render executes at a time and each render
+    /// snapshots `state` when it *starts*, not when it was requested. This closes
+    /// the race where a render holding a pre-update state snapshot could land its
+    /// contact-store write after a fresher render, leaving a stale image baked into
+    /// the contact while `lastRenderedStaleness` claimed otherwise — which then made
+    /// the staleness timer skip the repair until the next data event.
+    private func enqueueRender(_ request: RenderRequest) {
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+
+            // Coalesce into an already-queued render: it will snapshot the latest
+            // state when it starts anyway. Just make sure a data-driven request
+            // isn't downgraded to a staleness-only write gate.
+            if self.queuedRenderRequest != nil {
+                if request == .full {
+                    self.queuedRenderRequest = .full
+                }
+                return
+            }
+
+            self.queuedRenderRequest = request
+            let previousRender = self.renderTask
+            self.renderTask = Task {
+                await previousRender?.value
+                await self.runQueuedRender()
+            }
+        }
+    }
+
+    /// Executes one queued render: refreshes the state first, then re-renders all
+    /// images. Only ever runs on the serial render chain built in `enqueueRender`.
+    private func runQueuedRender() async {
+        // Claim the queued request; requests arriving from here on enqueue a new
+        // render behind this one instead of coalescing into it.
+        guard let request = await MainActor.run(body: { () -> RenderRequest? in
+            let queued = queuedRenderRequest
+            queuedRenderRequest = nil
+            return queued
+        }) else { return }
+
+        // Always re-read the latest data so even a timer-driven render can never
+        // bake an outdated reading into the image.
+        await updateContactImageState()
+
+        if request == .stalenessOnly {
+            // Authoritative staleness gate: evaluated on the serialized chain and
+            // after the state refresh, so it reflects exactly what would be
+            // rendered — a stale pre-check by the timer can't wedge the pipeline.
+            let unchanged = await MainActor.run {
+                RenderStaleness.current(for: state) == lastRenderedStaleness
+            }
+            if unchanged { return }
+        }
+
+        await updateContactImages()
     }
 
     // MARK: - Core Data Fetches
@@ -211,6 +390,7 @@ final class BaseContactImageManager: NSObject, ContactImageManager, Injectable {
                     : Decimal(firstGlucoseValue.glucose).asMmolL
 
                 state.glucose = Formatter.glucoseFormatter(for: units).string(from: value as NSNumber)
+                state.glucoseDate = firstGlucoseValue.date
                 state.trend = firstGlucoseValue.directionEnum?.symbol
 
                 let delta = glucoseObjects.count >= 2
@@ -220,7 +400,13 @@ final class BaseContactImageManager: NSObject, ContactImageManager, Injectable {
                 state.delta = deltaFormatter.string(from: deltaConverted as NSNumber)
             }
 
-            state.lastLoopDate = lastDetermination?.timestamp
+            // Drive the loop ring from the same source as the app's loop pill
+            // (`apsManager.lastLoopDate`), not the determination's `timestamp`, which
+            // is only stamped on enacted (closed-loop) determinations and so lags or
+            // never updates in open loop. `.distantPast` means "no loop yet" -> nil,
+            // so the ring shows gray rather than a spurious stale-red.
+            let loopDate = apsManager.lastLoopDate
+            state.lastLoopDate = loopDate == .distantPast ? nil : loopDate
 
             let iobValue = iobService.currentIOB ?? 0.0
             state.iob = iobValue
@@ -325,15 +511,39 @@ final class BaseContactImageManager: NSObject, ContactImageManager, Injectable {
     /// Updates the images of all contacts stored in Core Data.
     /// This function iterates through all stored `ContactImageEntry` objects, generates a new contact image
     /// based on the current `ContactImageState`, and updates the image in the user's Apple Contacts.
-    /// - Important: This function should be called whenever the `ContactImageState` changes.
+    /// - Important: Only call this from the serialized render pipeline
+    ///   (`enqueueRender`), so no two renders interleave and the contact store
+    ///   always ends up holding the newest snapshot. The shared `state` and
+    ///   `lastRenderedStaleness` are read/committed on the main actor, while the
+    ///   heavy image render and blocking `CNContactStore` I/O stay off the main
+    ///   thread.
     func updateContactImages() async {
+        // Take a background task assertion so that when this runs on a brief
+        // background wake (e.g. a CGM BLE delivery), iOS grants enough time to
+        // finish the render + CNContactStore write instead of suspending us
+        // mid-flight and leaving a half-updated or stale image baked in. In the
+        // foreground this is effectively a no-op.
+        let backgroundTaskID = await MainActor.run { startBackgroundTask(withName: "Update Contact Images") }
+
+        // Snapshot the render inputs on the main actor: a consistent copy of
+        // `state` plus the staleness we are about to render. Committing the gate
+        // only after a successful write (below) means a failed or no-op pass
+        // leaves the periodic timer free to retry next tick.
+        let (stateSnapshot, renderedStaleness) = await MainActor.run {
+            (state, RenderStaleness.current(for: state))
+        }
+        var didUpdateAnyContact = false
+
         // Iterate through all stored ContactImageEntry objects
         for contactEntry in await contactImageStorage.fetchContactImageEntries() {
             // Ensure the contact has a valid contact ID
             guard let contactId = contactEntry.contactId else { continue }
 
-            // Generate a new image for the contact based on the updated state
-            let newImage = await ContactPicture.getImage(contact: contactEntry, state: state)
+            // Generate a new image for the contact based on the snapshotted state.
+            // `getImage` is main-actor isolated (SwiftUI `View`), so the `await`
+            // hops to the main thread for the render only; the CNContactStore I/O
+            // below stays off it.
+            let newImage = await ContactPicture.getImage(contact: contactEntry, state: stateSnapshot)
 
             do {
                 // Fetch the existing contact from CNContactStore using its identifier
@@ -364,11 +574,26 @@ final class BaseContactImageManager: NSObject, ContactImageManager, Injectable {
 
                 // Execute the save request to persist the changes
                 try contactStore.execute(saveRequest)
+                didUpdateAnyContact = true
 
                 debugPrint("\(DebuggingIdentifiers.succeeded) Updated contact image for \(contactId)")
             } catch {
                 debugPrint("\(DebuggingIdentifiers.failed) Failed to update contact image for \(contactId): \(error)")
             }
+        }
+
+        // Commit the gate only on a successful render, so a transient
+        // CNContactStore failure or an empty-entries pass doesn't wedge the
+        // periodic staleness timer into skipping needed refreshes. Written on
+        // the main actor to stay serialized with the timer's read.
+        if didUpdateAnyContact {
+            await MainActor.run { lastRenderedStaleness = renderedStaleness }
+        }
+
+        // Release the background task assertion now the render + writes are done.
+        await MainActor.run {
+            var id = backgroundTaskID
+            endBackgroundTaskSafely(&id, taskName: "Update Contact Images")
         }
     }
 

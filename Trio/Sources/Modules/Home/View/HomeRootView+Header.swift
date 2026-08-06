@@ -24,11 +24,7 @@ extension Home.RootView {
             cgmAvailable: state.cgmAvailable,
             currentGlucoseTarget: state.currentGlucoseTarget,
             glucoseColorScheme: state.glucoseColorScheme,
-            glucose: state.latestTwoGlucoseValues,
-            cgmProgress: state.cgmProgressHighlight,
-            cgmStatus: state.cgmDisplayState,
-            cgmSensorExpiresAt: state.cgmSensorExpiresAt,
-            cgmWarmupEndsAt: state.cgmWarmupEndsAt
+            glucose: state.latestTwoGlucoseValues
         )
         .onTapGesture {
             if !state.cgmAvailable {
@@ -65,44 +61,6 @@ extension Home.RootView {
         }
     }
 
-    @ViewBuilder func rightHeaderPanel() -> some View {
-        VStack(alignment: .leading, spacing: 20) {
-            /// Loop view at bottomLeading
-            LoopView(
-                closedLoop: state.closedLoop,
-                timerDate: state.timerDate,
-                isLooping: state.isLooping,
-                lastLoopDate: state.lastLoopDate,
-                manualTempBasal: state.manualTempBasal,
-                determination: state.determinationsFromPersistence
-            )
-            .onTapGesture {
-                state.isLoopStatusPresented = true
-            }
-            /// eventualBG string at bottomTrailing
-
-            if let eventualBG = state.enactedAndNonEnactedDeterminations.first?.eventualBG {
-                let eventualGlucose = eventualBG as Decimal
-                HStack {
-                    Image(systemName: "arrow.right.circle")
-                        .font(.callout)
-                        .fontWeight(.bold)
-
-                    Text(state.units == .mgdL ? eventualGlucose.description : eventualGlucose.formattedAsMmolL)
-                        .font(.callout)
-                        .fontWeight(.bold)
-                        .fontDesign(.rounded)
-                }
-                // aligns the evBG icon exactly with the first pixel of loop status icon
-                .padding(.leading, 12)
-            } else {
-                HStack {
-                    Image(systemName: "arrow.right.circle")
-                        .font(.callout).fontWeight(.bold)
-                    Text("--")
-                        .font(.callout).fontWeight(.bold).fontDesign(.rounded)
-                }
-            }
-        }
-    }
+    // NOTE: rightHeaderPanel() (loop status + evBG) is superseded by the pill-based
+    // rightHeaderPanel(_:) in HomeRootView+HeaderPills.swift.
 }

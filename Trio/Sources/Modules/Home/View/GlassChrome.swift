@@ -64,3 +64,107 @@ extension View {
         ))
     }
 }
+
+/// Capsule glass, for the header pills. Same behaviour as `GlassPanelBackground`
+/// in a capsule shape: clear glass reads as a read-only pill, a tint marks it
+/// as a control (e.g. the loop pill).
+struct GlassCapsuleBackground: ViewModifier {
+    var tint: Color?
+    var tintOpacity: Double = 0.12
+    var strokeOpacity: Double = 0.35
+    var strokeWidth: CGFloat = 1
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(
+                    tint.map { Glass.regular.tint($0.opacity(tintOpacity)) } ?? .regular,
+                    in: Capsule()
+                )
+                .overlay(Capsule().strokeBorder(
+                    (tint ?? Color.primary).opacity(strokeOpacity * 0.6),
+                    lineWidth: strokeWidth
+                ))
+        } else {
+            content
+                .background(
+                    Capsule()
+                        .fill(.ultraThinMaterial)
+                        .overlay(Capsule().fill((tint ?? .clear).opacity(tintOpacity)))
+                        .overlay(Capsule().strokeBorder(
+                            (tint ?? Color.primary).opacity(strokeOpacity),
+                            lineWidth: strokeWidth
+                        ))
+                        .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.22 : 0.08), radius: 2, y: 1)
+                )
+        }
+    }
+}
+
+/// Circle glass, for icon-sized controls such as the alarms button.
+struct GlassCircleBackground: ViewModifier {
+    var tint: Color?
+    var tintOpacity: Double = 0.12
+    var strokeOpacity: Double = 0.35
+    var strokeWidth: CGFloat = 1
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(
+                    tint.map { Glass.regular.tint($0.opacity(tintOpacity)) } ?? .regular,
+                    in: Circle()
+                )
+                .overlay(Circle().strokeBorder(
+                    (tint ?? Color.primary).opacity(strokeOpacity * 0.6),
+                    lineWidth: strokeWidth
+                ))
+        } else {
+            content
+                .background(
+                    Circle()
+                        .fill(.ultraThinMaterial)
+                        .overlay(Circle().fill((tint ?? .clear).opacity(tintOpacity)))
+                        .overlay(Circle().strokeBorder(
+                            (tint ?? Color.primary).opacity(strokeOpacity),
+                            lineWidth: strokeWidth
+                        ))
+                        .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.22 : 0.08), radius: 2, y: 1)
+                )
+        }
+    }
+}
+
+extension View {
+    func glassCapsule(
+        tint: Color? = nil,
+        tintOpacity: Double = 0.12,
+        strokeOpacity: Double = 0.35,
+        strokeWidth: CGFloat = 1
+    ) -> some View {
+        modifier(GlassCapsuleBackground(
+            tint: tint,
+            tintOpacity: tintOpacity,
+            strokeOpacity: strokeOpacity,
+            strokeWidth: strokeWidth
+        ))
+    }
+
+    func glassCircle(
+        tint: Color? = nil,
+        tintOpacity: Double = 0.12,
+        strokeOpacity: Double = 0.35,
+        strokeWidth: CGFloat = 1
+    ) -> some View {
+        modifier(GlassCircleBackground(
+            tint: tint,
+            tintOpacity: tintOpacity,
+            strokeOpacity: strokeOpacity,
+            strokeWidth: strokeWidth
+        ))
+    }
+}

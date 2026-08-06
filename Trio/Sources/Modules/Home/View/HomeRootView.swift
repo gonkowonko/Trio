@@ -62,7 +62,8 @@ extension Home {
         @ViewBuilder func mainChart(geo: GeometryProxy) -> some View {
             // the chart is the only flexible zone: it takes what the fixed slots leave over
             let chartHeight = max(
-                geo.size.height - HomeLayout.headerHeight - HomeLayout.mealSlotHeight - HomeLayout.bottomZoneHeight,
+                geo.size.height - HomeLayout.headerHeight - HomeLayout.deviceLanesHeight - HomeLayout.deviceLanesGap - HomeLayout
+                    .bottomZoneHeight,
                 HomeLayout.chartMinHeight
             )
             ZStack {
@@ -87,26 +88,15 @@ extension Home {
                     .offset(x: 0, y: -10)
             }
             .overlay(alignment: .topTrailing) {
-                // borderless capsule (not a control); centered in the basal
-                // pane band so it clears the y-axis labels on every device size
-                if let rate = currentBasalRateLabel {
-                    Text(rate)
-                        .font(.system(size: 14, weight: .semibold))
-                        .fontDesign(.rounded)
-                        .foregroundStyle(Color.insulin)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Capsule().fill(.ultraThinMaterial))
-                        .frame(height: chartHeight * 0.10)
-                        .padding(.trailing, 16)
-                }
+                // shape-encoded basal tag: fill vs outline carries the delivery
+                // mode (loop-set temp vs scheduled profile), and it also surfaces
+                // suspended / max-IOB states the old rate-only label couldn't.
+                // Centered in the basal pane band so it clears the y-axis labels.
+                basalRateTag
+                    .frame(height: chartHeight * 0.10)
+                    // align with the content column (pills, device cards, bottom panels)
+                    .padding(.trailing, 10)
             }
-        }
-
-        private var currentBasalRateLabel: String? {
-            guard let rate = state.tempBasals.last?.tempBasal?.rate else { return nil }
-            let value = Formatter.decimalFormatterWithTwoFractionDigits.string(from: rate) ?? "\(rate)"
-            return value + String(localized: " U/hr", comment: "Unit per hour with space")
         }
 
         @ViewBuilder private var chartInfoButton: some View {
@@ -122,8 +112,8 @@ extension Home {
             }
             .contentShape(Circle())
             .padding(.bottom, 6)
-            // same trailing inset as the alarm bell in the meal row
-            .padding(.trailing, 16)
+            // align with the content column (pills, device cards, bottom panels)
+            .padding(.trailing, 10)
         }
 
         @ViewBuilder func mainViewElements(_ geo: GeometryProxy) -> some View {
@@ -172,26 +162,38 @@ extension Home {
                     {
                         BluetoothRequiredView()
                     } else {
-                        /// right panel with loop status and evBG
+                        /// right panel: loop status + eventual-BG readout pills
                         HStack {
                             Spacer()
-                            rightHeaderPanel()
-                        }.padding(.trailing, 20)
+                            rightHeaderPanel(geo)
+                        }.padding(.trailing, 10)
 
                         /// glucose bobble
                         glucoseView
 
-                        /// left panel with pump related info
+                        /// left panel: IOB / COB readout pills
                         HStack {
-                            pumpView
+                            leftHeaderPanel(geo)
                             Spacer()
-                        }.padding(.leading, 20)
+                        }.padding(.leading, 10)
                     }
                 }
                 // fixed slot: header state changes never reflow the zones below
                 .frame(height: HomeLayout.headerHeight)
+                // global snooze control lives in the top-trailing corner, apart
+                // from the readout pills (overlay, so it never shifts the zones)
+                .overlay(alignment: .topTrailing) {
+                    alarmsButton
+                        .padding(.top, 2)
+                        .padding(.trailing, 10)
+                }
 
-                mealPanel().frame(height: HomeLayout.mealSlotHeight)
+                /// device session lanes (CGM + pump) above the chart; replaces the
+                /// bobble sensor arc and the standalone pump panel
+                deviceLanes
+                    .frame(height: HomeLayout.deviceLanesHeight)
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, HomeLayout.deviceLanesGap)
 
                 mainChart(geo: geo)
             }

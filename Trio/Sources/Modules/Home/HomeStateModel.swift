@@ -53,6 +53,7 @@ extension Home {
         var battery: Battery?
         var reservoir: Decimal?
         var pumpName = ""
+        var cgmName = ""
         var pumpExpiresAtDate: Date?
         var pumpActivatedAtDate: Date?
         var highTTraisesSens: Bool = false
@@ -118,6 +119,7 @@ extension Home {
         var cgmProgressHighlight: DeviceLifecycleProgress?
         var cgmSensorExpiresAt: Date?
         var cgmWarmupEndsAt: Date?
+        var cgmSensorTimeline: SensorLifecycleTimeline?
         var listOfCGM: [CGMModel] = []
         var cgmCurrent = cgmDefaultModel
         var pumpInitialSettings = PumpConfig.PumpInitialSettings.default
@@ -539,6 +541,7 @@ extension Home {
                         lifecycle: progress
                     )
                     self.cgmWarmupEndsAt = Self.resolveWarmupEndsAt(manager: manager)
+                    self.cgmSensorTimeline = Self.resolveSensorTimeline(manager: manager)
                 }
             }
             timer.resume()
@@ -566,6 +569,9 @@ extension Home {
                         lifecycle: progress
                     )
                     self.cgmWarmupEndsAt = Self.resolveWarmupEndsAt(
+                        manager: self.fetchGlucoseManager.cgmManager
+                    )
+                    self.cgmSensorTimeline = Self.resolveSensorTimeline(
                         manager: self.fetchGlucoseManager.cgmManager
                     )
                 }
@@ -670,6 +676,10 @@ extension Home {
 
         @MainActor private func setupCGMSettings() async {
             cgmAvailable = fetchGlucoseManager.cgmGlucoseSourceType != CGMType.none
+            // Prefer the active plugin manager's title (e.g. "Dexcom G7");
+            // fall back to the built-in source type's display name.
+            cgmName = fetchGlucoseManager.cgmManager?.localizedTitle
+                ?? fetchGlucoseManager.cgmGlucoseSourceType.displayName
 
             listOfCGM = (
                 CGMType.allCases.filter { $0 != CGMType.plugin }.map {
@@ -1001,6 +1011,23 @@ extension Home {
                 return ends > Date() ? ends : nil
             }
             return nil
+        }
+
+        /// Full-lifespan anchor dates for the always-on countdown ring. Currently
+        /// G7 only — it exposes activation, lifetime and grace end. Other CGMs
+        /// return `nil` and keep the legacy last-48h `cgmProgress` arc.
+        private static func resolveSensorTimeline(manager: CGMManagerUI?) -> SensorLifecycleTimeline? {
+            guard let g7 = manager as? G7CGMManager,
+                  let start = g7.sensorActivatedAt,
+                  let expiresAt = g7.sensorExpiresAt,
+                  let endsAt = g7.sensorEndsAt
+            else { return nil }
+            return SensorLifecycleTimeline(
+                start: start,
+                expiresAt: expiresAt,
+                endsAt: endsAt,
+                finalPhaseDuration: SensorLifecycleTimeline.defaultFinalPhaseDuration
+            )
         }
     }
 }

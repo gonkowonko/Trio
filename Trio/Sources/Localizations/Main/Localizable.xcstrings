@@ -3940,7 +3940,7 @@
       }
     },
     " U/hr" : {
-      "comment" : "Unit insulin per hour\nUnit per hour with space",
+      "comment" : "Unit insulin per hour",
       "localizations" : {
         "bg" : {
           "stringUnit" : {
@@ -11404,6 +11404,9 @@
           }
         }
       }
+    },
+    "%lld m" : {
+
     },
     "%lld min" : {
       "localizations" : {
@@ -20961,6 +20964,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "−"
+          }
+        }
+      }
+    },
+    "⌀ %@ · GMI %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "⌀ %1$@ · GMI %2$@"
           }
         }
       }
@@ -34160,6 +34173,9 @@
           }
         }
       }
+    },
+    "Add Treatment" : {
+
     },
     "Add Variant" : {
       "localizations" : {
@@ -56057,6 +56073,7 @@
       }
     },
     "Axis" : {
+      "extractionState" : "stale",
       "localizations" : {
         "bg" : {
           "stringUnit" : {
@@ -77331,6 +77348,12 @@
           }
         }
       }
+    },
+    "Choose what the statistics panel on the home screen displays." : {
+
+    },
+    "Choose what the statistics panel on the home screen shows by default. Tapping the panel always opens the full statistics view.\n\nTime in Range: today's time in range percentage with a glucose distribution bar.\n\nDistribution Bar Only: just the glucose distribution bar, without the percentage.\n\nToday's Averages: today's average glucose and GMI (Glucose Management Index)." : {
+
     },
     "Choose whether or not to display one or both X- and Y-Axis grid lines." : {
       "localizations" : {
@@ -109580,6 +109603,9 @@
           }
         }
       }
+    },
+    "Distribution Bar Only" : {
+      "comment" : "Home stats panel face option"
     },
     "Do not enable this feature until you have optimized your CR (carb ratio) setting." : {
       "localizations" : {
@@ -144590,6 +144616,9 @@
         }
       }
     },
+    "Grace" : {
+      "comment" : "Device lane label prefix during the post-expiry grace period"
+    },
     "Gradient Purple = As readings approach and exceed above target, they become more purple." : {
       "localizations" : {
         "bg" : {
@@ -150025,6 +150054,9 @@
           }
         }
       }
+    },
+    "Home Statistics Panel" : {
+
     },
     "Home View Button Panel " : {
       "comment" : "UI/UX option",
@@ -228343,6 +228375,9 @@
         }
       }
     },
+    "Replace sensor" : {
+      "comment" : "Device lane label when the CGM session is fully over"
+    },
     "Represents carb equivalent for fat and protein, calculated using the Warsaw Method." : {
       "localizations" : {
         "bg" : {
@@ -253040,6 +253075,9 @@
         }
       }
     },
+    "Stabilizing" : {
+      "comment" : "CGM stabilizing status"
+    },
     "STALE DATA" : {
       "comment" : "Information displayed when watch app data outdated or stale.",
       "localizations" : {
@@ -259941,6 +259979,9 @@
           }
         }
       }
+    },
+    "Suspended" : {
+      "comment" : "Pump has suspended insulin delivery"
     },
     "Suspending insulin delivery..." : {
       "comment" : "Text for suspend resume button when insulin delivery is suspending",
@@ -282036,7 +282077,7 @@
       }
     },
     "Time in Range" : {
-      "comment" : "Stats banner subtitle"
+      "comment" : "Home stats panel face option\nStats banner subtitle"
     },
     "Time in Range Type" : {
       "localizations" : {
@@ -285643,6 +285684,9 @@
         }
       }
     },
+    "today" : {
+      "comment" : "Stats banner scope"
+    },
     "Today" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -285773,6 +285817,12 @@
           }
         }
       }
+    },
+    "Today's average" : {
+      "comment" : "Stats banner subtitle"
+    },
+    "Today's Averages" : {
+      "comment" : "Home stats panel face option"
     },
     "Tomorrow" : {
       "localizations" : {
@@ -295770,7 +295820,7 @@
       }
     },
     "U/hr" : {
-      "comment" : "Insulin unit per hour abbreviation\nUnits text for temporary basal rate",
+      "comment" : "Insulin unit per hour abbreviation\nInsulin units per hour\nUnits text for temporary basal rate",
       "localizations" : {
         "bg" : {
           "stringUnit" : {
@@ -305847,6 +305897,9 @@
           }
         }
       }
+    },
+    "Warmup" : {
+      "comment" : "CGM warmup status (short, for the device lane)"
     },
     "Warning" : {
       "comment" : "Warning title",

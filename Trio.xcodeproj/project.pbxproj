@@ -74,6 +74,7 @@
 		7A11AC0DE000000000000110 /* HomeRootView+BottomControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A11AC0DE000000000000010 /* HomeRootView+BottomControls.swift */; };
 		7A11AC0DE00000000000010E /* HomeRootView+MealPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A11AC0DE00000000000000E /* HomeRootView+MealPanel.swift */; };
 		7A11AC0DE00000000000010D /* HomeRootView+Header.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A11AC0DE00000000000000D /* HomeRootView+Header.swift */; };
+		BD11C002000000000000C007 /* HomeRootView+HeaderPills.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD11C003000000000000C007 /* HomeRootView+HeaderPills.swift */; };
 		3811DE3F25C9D4A100A708ED /* SettingsStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DE3925C9D4A100A708ED /* SettingsStateModel.swift */; };
 		3811DE4125C9D4A100A708ED /* SettingsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DE3C25C9D4A100A708ED /* SettingsRootView.swift */; };
 		3811DE4225C9D4A100A708ED /* SettingsDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DE3D25C9D4A100A708ED /* SettingsDataFlow.swift */; };
@@ -478,8 +479,9 @@
 		BD11A001000000000000A013 /* TandemKitAlertEmissionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD11A000000000000000A013 /* TandemKitAlertEmissionTests.swift */; };
 		BD11A001000000000000A014 /* AlertColdStartReplayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD11A000000000000000A014 /* AlertColdStartReplayTests.swift */; };
 		BD11C001000000000000C001 /* CGMSensorDisplayState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD11C000000000000000C001 /* CGMSensorDisplayState.swift */; };
-		BD11C001000000000000C003 /* SensorLifecycleArcView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD11C000000000000000C003 /* SensorLifecycleArcView.swift */; };
 		BD11C001000000000000C004 /* SensorStatusTagView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD11C000000000000000C004 /* SensorStatusTagView.swift */; };
+		BD11C001000000000000C005 /* SensorLifecycleTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD11C000000000000000C005 /* SensorLifecycleTimeline.swift */; };
+		BD11C001000000000000C007 /* DeviceLanesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD11C000000000000000C007 /* DeviceLanesView.swift */; };
 		BD136FAE2F6AC55F002217F9 /* NSFetchedResultsControllerDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD136FAD2F6AC555002217F9 /* NSFetchedResultsControllerDelegate.swift */; };
 		BD1661312B82ADAB00256551 /* CustomProgressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD1661302B82ADAB00256551 /* CustomProgressView.swift */; };
 		BD175EBE0000100000000001 /* HistoryDataFlow+Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD175EFE0000100000000001 /* HistoryDataFlow+Models.swift */; };
@@ -1112,6 +1114,7 @@
 		7A11AC0DE000000000000010 /* HomeRootView+BottomControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeRootView+BottomControls.swift"; sourceTree = "<group>"; };
 		7A11AC0DE00000000000000E /* HomeRootView+MealPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeRootView+MealPanel.swift"; sourceTree = "<group>"; };
 		7A11AC0DE00000000000000D /* HomeRootView+Header.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeRootView+Header.swift"; sourceTree = "<group>"; };
+		BD11C003000000000000C007 /* HomeRootView+HeaderPills.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeRootView+HeaderPills.swift"; sourceTree = "<group>"; };
 		3811DE3925C9D4A100A708ED /* SettingsStateModel.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SettingsStateModel.swift; sourceTree = "<group>"; };
 		3811DE3C25C9D4A100A708ED /* SettingsRootView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SettingsRootView.swift; sourceTree = "<group>"; };
 		3811DE3D25C9D4A100A708ED /* SettingsDataFlow.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SettingsDataFlow.swift; sourceTree = "<group>"; };
@@ -1509,8 +1512,9 @@
 		BD11A000000000000000A013 /* TandemKitAlertEmissionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TandemKitAlertEmissionTests.swift; sourceTree = "<group>"; };
 		BD11A000000000000000A014 /* AlertColdStartReplayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertColdStartReplayTests.swift; sourceTree = "<group>"; };
 		BD11C000000000000000C001 /* CGMSensorDisplayState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGMSensorDisplayState.swift; sourceTree = "<group>"; };
-		BD11C000000000000000C003 /* SensorLifecycleArcView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensorLifecycleArcView.swift; sourceTree = "<group>"; };
 		BD11C000000000000000C004 /* SensorStatusTagView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensorStatusTagView.swift; sourceTree = "<group>"; };
+		BD11C000000000000000C005 /* SensorLifecycleTimeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensorLifecycleTimeline.swift; sourceTree = "<group>"; };
+		BD11C000000000000000C007 /* DeviceLanesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceLanesView.swift; sourceTree = "<group>"; };
 		BD136FAD2F6AC555002217F9 /* NSFetchedResultsControllerDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NSFetchedResultsControllerDelegate.swift; sourceTree = "<group>"; };
 		BD1661302B82ADAB00256551 /* CustomProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomProgressView.swift; sourceTree = "<group>"; };
 		BD175EFE0000100000000001 /* HistoryDataFlow+Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HistoryDataFlow+Models.swift"; sourceTree = "<group>"; };
@@ -2425,6 +2429,7 @@
 				7A11AC0DE000000000000010 /* HomeRootView+BottomControls.swift */,
 				7A11AC0DE00000000000000E /* HomeRootView+MealPanel.swift */,
 				7A11AC0DE00000000000000D /* HomeRootView+Header.swift */,
+				BD11C003000000000000C007 /* HomeRootView+HeaderPills.swift */,
 				3833B51E260264AC003021B3 /* Chart */,
 				3833B51F260264B6003021B3 /* Header */,
 				FDB1D1005DA54C048E622761 /* QuickPickBoluses */,
@@ -3571,8 +3576,9 @@
 			isa = PBXGroup;
 			children = (
 				BD11C000000000000000C001 /* CGMSensorDisplayState.swift */,
-				BD11C000000000000000C003 /* SensorLifecycleArcView.swift */,
 				BD11C000000000000000C004 /* SensorStatusTagView.swift */,
+				BD11C000000000000000C005 /* SensorLifecycleTimeline.swift */,
+				BD11C000000000000000C007 /* DeviceLanesView.swift */,
 			);
 			path = SensorLifecycle;
 			sourceTree = "<group>";
@@ -5222,6 +5228,7 @@
 				7A11AC0DE000000000000110 /* HomeRootView+BottomControls.swift in Sources */,
 				7A11AC0DE00000000000010E /* HomeRootView+MealPanel.swift in Sources */,
 				7A11AC0DE00000000000010D /* HomeRootView+Header.swift in Sources */,
+				BD11C002000000000000C007 /* HomeRootView+HeaderPills.swift in Sources */,
 				584C79A91D034426A1DE60CB /* SlideToConfirmView.swift in Sources */,
 				DECF1903237041E2BBBE4033 /* QuickPickBolusesInfoView.swift in Sources */,
 				3F23E18680094E6DA98628E4 /* QuickPickBolusesView.swift in Sources */,
@@ -5550,8 +5557,9 @@
 				E0D4F80527513ECF00BDF1FE /* HealthKitSample.swift in Sources */,
 				38AAF85525FFF846004AF583 /* CurrentGlucoseView.swift in Sources */,
 				BD11C001000000000000C001 /* CGMSensorDisplayState.swift in Sources */,
-				BD11C001000000000000C003 /* SensorLifecycleArcView.swift in Sources */,
 				BD11C001000000000000C004 /* SensorStatusTagView.swift in Sources */,
+				BD11C001000000000000C005 /* SensorLifecycleTimeline.swift in Sources */,
+				BD11C001000000000000C007 /* DeviceLanesView.swift in Sources */,
 				041D1E995A6AE92E9289DC49 /* TreatmentsDataFlow.swift in Sources */,
 				DD32CF9E2CC824C5003686D6 /* TrioRemoteControl+Override.swift in Sources */,
 				BD249D922D42FC5300412DEB /* GlucoseSectorChart.swift in Sources */,

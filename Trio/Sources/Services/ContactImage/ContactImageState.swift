@@ -4,6 +4,9 @@ struct ContactImageState: Codable {
     var glucose: String?
     var trend: String?
     var delta: String?
+    /// Timestamp of the glucose reading behind `glucose`/`trend`/`delta`.
+    /// Used to mute those pieces once the CGM reading goes stale.
+    var glucoseDate: Date?
     var lastLoopDate: Date?
     var iob: Decimal?
     var iobText: String?

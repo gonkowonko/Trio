@@ -91,6 +91,7 @@ enum GarminDatafield: String, JSON, CaseIterable, Identifiable, Codable, Hashabl
     var id: String { rawValue }
 
     case trio
+    case trioAlternative
     case swissalpine
     case none
 
@@ -98,6 +99,8 @@ enum GarminDatafield: String, JSON, CaseIterable, Identifiable, Codable, Hashabl
         switch self {
         case .trio:
             return String(localized: "Trio", comment: "")
+        case .trioAlternative:
+            return "Trio IQ"
         case .swissalpine:
             return String(localized: "Swissalpine", comment: "")
         case .none:
@@ -112,6 +115,8 @@ enum GarminDatafield: String, JSON, CaseIterable, Identifiable, Codable, Hashabl
             // return UUID(uuidString: "71cf0982-ca41-42a5-8441-ea81d36056c3")  // local build
             // return UUID(uuidString: "f07f4ef9-108b-4397-95c9-217b5173412e")  // ConnectIQ test build
             return UUID(uuidString: "3d9b6528-8c84-459a-bbab-989b5f001ebd") // ConnectIQ live build
+        case .trioAlternative:
+            return UUID(uuidString: "3554c407-679d-4177-8ca0-5b6ad89d285b")
         case .swissalpine:
             // return UUID(uuidString: "7A2268F6-3381-4474-81BD-0A3E7F458CB7") // ConnectIQ test build
             return UUID(uuidString: "dec5292a-74b0-41bc-8e45-cd93f1d5e137") // ConnectIQ live build

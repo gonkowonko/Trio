@@ -4,6 +4,37 @@ import SwiftUI
 struct ContactPicture: View {
     private enum Config {
         static let lag: TimeInterval = 30
+        /// CGM readings older than this are rendered muted (dimmed). Set one CGM
+        /// cycle (~1 min) past the ring's 5-min warning so normal reading jitter
+        /// doesn't flip it every cycle.
+        static let glucoseStaleInterval: TimeInterval = 6 * 60
+        /// Readings older than this are considered urgently stale. The dim is the
+        /// same as the warning band; the split is kept only so the render cache
+        /// (`ContactImageManager`) still refreshes across it. Set at two missed
+        /// readings (~15 min) rather than one, so a single background BLE hiccup
+        /// that backfills a minute later doesn't trip it.
+        static let glucoseUrgentStaleInterval: TimeInterval = 15 * 60
+    }
+
+    /// How stale the current CGM reading is. Both stale bands dim the reading
+    /// identically now; the distinction only drives the render cache's refresh.
+    enum GlucoseStaleness {
+        case fresh // <= 6 min -> full colour
+        case warning // 6–15 min -> dimmed
+        case urgent // > 15 min (or missing) -> dimmed
+
+        static func classify(glucoseDate: Date?, now: Date = Date()) -> GlucoseStaleness {
+            guard let glucoseDate = glucoseDate else { return .urgent }
+            // Subtract the same lag the loop ring uses so the bands flip in lockstep.
+            let age = now.timeIntervalSince(glucoseDate) - Config.lag
+            if age >= Config.glucoseUrgentStaleInterval {
+                return .urgent
+            } else if age >= Config.glucoseStaleInterval {
+                return .warning
+            } else {
+                return .fresh
+            }
+        }
     }
 
     @Binding var contact: ContactImageEntry
@@ -281,7 +312,19 @@ struct ContactPicture: View {
             color
         }
 
+        // Dim the glucose-derived pieces (value, trend, delta) once the CGM
+        // reading goes stale. The last value is still shown, just muted — mirrors
+        // the Live Activity's stale treatment. Both stale bands (warning/urgent)
+        // use the same dim; the reading is no longer struck through.
+        let isGlucoseDerived = value == .glucose || value == .trend || value == .delta
+        let staleness = GlucoseStaleness.classify(glucoseDate: state.glucoseDate)
+
         if let text = text {
+            let baseColor: Color = contact.colorMode == .color ? textColor : .white
+            let isStale = isGlucoseDerived && staleness != .fresh
+            // Dim the actual rendered color rather than swapping in an asset gray:
+            // dynamic/asset colors resolve to their light-mode variant in this
+            // trait-less bitmap context, so a nominal "gray" can come out near-white.
             drawText(
                 text: text,
                 rect: rect,
@@ -289,7 +332,7 @@ struct ContactPicture: View {
                 fontSize: fontSize,
                 fontWeight: fontWeight,
                 fontWidth: fontWidth,
-                color: contact.colorMode == .color ? textColor : .white
+                color: isStale ? baseColor.opacity(0.4) : baseColor
             )
         }
     }
@@ -307,11 +350,12 @@ struct ContactPicture: View {
 
         func makeAttributes(_ size: Int) -> [NSAttributedString.Key: Any] {
             let font = UIFont.systemFont(ofSize: CGFloat(size), weight: fontWeight.uiFontWeight)
-            return [
+            let attributes: [NSAttributedString.Key: Any] = [
                 .font: font,
                 .foregroundColor: UIColor(color),
                 .kern: fontWidth.value * Double(fontSize) // `kern` is the correct key for tracking
             ]
+            return attributes
         }
 
         var attributes: [NSAttributedString.Key: Any] = makeAttributes(theFontSize)
