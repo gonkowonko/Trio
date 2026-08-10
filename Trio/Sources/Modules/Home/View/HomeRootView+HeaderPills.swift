@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 // MARK: - Header pills, device lanes, and basal tag (redesign grafted onto Home Layout v2)
 
@@ -169,11 +168,6 @@ extension Home.RootView {
             )
             .onTapGesture {
                 state.isLoopStatusPresented = true
-            }
-            .onLongPressGesture {
-                let impactHeavy = UIImpactFeedbackGenerator(style: .heavy)
-                impactHeavy.impactOccurred()
-                state.runLoop()
             }
 
             headerReadoutPill(

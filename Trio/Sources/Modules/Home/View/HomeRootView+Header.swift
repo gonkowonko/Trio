@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 // MARK: - Zone B: header (pump panel / glucose bobble / loop status)
 
@@ -32,11 +31,6 @@ extension Home.RootView {
             } else {
                 state.shouldDisplayCGMSetupSheet.toggle()
             }
-        }
-        .onLongPressGesture {
-            let impactHeavy = UIImpactFeedbackGenerator(style: .heavy)
-            impactHeavy.impactOccurred()
-            showSnoozeSheet = true
         }
     }
 
