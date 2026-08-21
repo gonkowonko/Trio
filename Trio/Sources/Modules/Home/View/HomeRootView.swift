@@ -32,7 +32,9 @@ extension Home {
         @State var showCGMSelection: Bool = false
         @State var showSnoozeSheet: Bool = false
         @State var showManualGlucose: Bool = false
+        @State var showReleaseNotes: Bool = false
         @State var alarmsSnoozeUntil: Date = .distantPast
+        @ObservedObject var releaseNotesService = ReleaseNotesService.shared
         // Pull-down-to-force-loop (see HomeRootView+Refresh.swift)
         @State var pullOffset: CGFloat = 0
         @State var isRefreshArmed = false
@@ -125,8 +127,6 @@ extension Home {
             // viewport-sized content: rubber-bands for the pull-down, never scrolls
             ScrollView(.vertical, showsIndicators: false) {
                 dashboardContent(geo)
-                    .padding(.top, isForcingLoop ? HomeLayout.refreshIndicatorHeight : 0)
-                    .animation(.easeInOut(duration: 0.25), value: isForcingLoop)
                     .background(
                         GeometryReader { g in
                             Color.clear.preference(
@@ -217,6 +217,9 @@ extension Home {
                 configureView()
                 refreshAlarmsSnooze()
             }
+            .task {
+                await releaseNotesService.load()
+            }
             // UserDefaults changes don't invalidate views; refresh on sheet dismissal
             .onChange(of: showSnoozeSheet) {
                 if !showSnoozeSheet { refreshAlarmsSnooze() }
@@ -232,6 +235,13 @@ extension Home {
             }
             .sheet(isPresented: $showSnoozeSheet) {
                 SnoozeAlertsSheetView(resolver: resolver, isPresented: $showSnoozeSheet)
+            }
+            .sheet(isPresented: $showReleaseNotes) {
+                if let notes = releaseNotesService.notes {
+                    ReleaseNotesSheetView(notes: notes) {
+                        releaseNotesService.acknowledge()
+                    }
+                }
             }
             .sheet(isPresented: $showManualGlucose) {
                 ManualGlucoseEntryView(units: state.units, isPresented: $showManualGlucose) { amount in
