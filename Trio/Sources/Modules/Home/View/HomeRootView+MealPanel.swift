@@ -43,5 +43,17 @@ extension Home.RootView {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("Alarms"))
+        .accessibilityValue(Text(
+            isSnoozed
+                ? String(
+                    format: String(localized: "snoozed, %d minutes remaining", comment: "Accessibility: alarm snooze"),
+                    remainingMinutes
+                )
+                : String(localized: "active", comment: "Accessibility: alarms active")
+        ))
+        .accessibilityHint(Text(String(localized: "Opens snooze options", comment: "Accessibility hint")))
+        .accessibilityAddTraits(.isButton)
     }
 }
