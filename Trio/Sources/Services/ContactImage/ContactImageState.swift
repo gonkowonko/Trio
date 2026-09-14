@@ -4,7 +4,6 @@ struct ContactImageState: Codable {
     var glucose: String?
     var trend: String?
     var direction: BloodGlucose.Direction?
-    var glucoseDate: Date?
     var delta: String?
     /// Timestamp of the glucose reading behind `glucose`/`trend`/`delta`.
     /// Used to mute those pieces once the CGM reading goes stale.
