@@ -59,6 +59,47 @@ extension Home.RootView {
         }
     }
 
+    /// The device lanes, or — while the chart is scrubbed — the readout for the point under
+    /// the finger.
+    ///
+    /// Upstream (#1455) moved that readout out of the chart and into its IOB / COB row. This
+    /// layout has no such row: IOB and COB are header pills, and the lanes hold the slot. So
+    /// the readout takes the lanes' slot instead, with the pattern upstream uses for its row —
+    /// both halves stay mounted and cross-fade on `opacity`, because a removal transition
+    /// does not play over a glass background. `ChartSelectionRow`, the scrub state and
+    /// `updateChartReadout` are all upstream's, unchanged.
+    @ViewBuilder var deviceLanesOrChartReadout: some View {
+        ZStack {
+            deviceLanes
+                .padding(.horizontal, 10)
+                .opacity(isChartReadoutVisible ? 0 : 1)
+                .allowsHitTesting(!isChartReadoutVisible)
+
+            // Renders from the last resolved selection, which is deliberately not cleared on
+            // decay: the row keeps its values to fade out with, and stays invisible and
+            // untouchable while no readout is showing.
+            if let readoutDate = chartReadoutDate,
+               let selectedGlucose = ChartSelectionLookup.glucose(at: readoutDate, in: state.glucoseFromPersistence)
+            {
+                ChartSelectionRow(
+                    selectedGlucose: selectedGlucose,
+                    determination: chartReadoutDeterminationDate.flatMap {
+                        ChartSelectionLookup.determination(at: $0, in: state.enactedAndNonEnactedDeterminations)
+                    },
+                    units: state.units,
+                    highGlucose: state.highGlucose,
+                    lowGlucose: state.lowGlucose,
+                    currentGlucoseTarget: state.currentGlucoseTarget,
+                    glucoseColorScheme: state.glucoseColorScheme,
+                    isSmoothingEnabled: state.settingsManager.settings.smoothGlucose
+                )
+                .padding(.horizontal)
+                .opacity(isChartReadoutVisible ? 1 : 0)
+                .allowsHitTesting(isChartReadoutVisible)
+            }
+        }
+    }
+
     /// The session lanes above the chart. Each lane is its device's tap
     /// target — the pump column is gone, so the pod lane is the pump's
     /// entry point (including setup, via the "Add pump" empty state).

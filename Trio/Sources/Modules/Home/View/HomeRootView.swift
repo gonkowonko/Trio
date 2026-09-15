@@ -42,6 +42,16 @@ extension Home {
         @State var isRefreshArmed = false
         @State var isForcingLoop = false
         @State var notificationsDisabled = false
+        /// Date under the finger while the chart is scrubbed, else nil. Owned here because the
+        /// readout lives in the meal slot, outside the chart.
+        @State var chartSelection: Date? = nil
+        /// Last scrub position that resolved to a reading / a determination. The readout renders
+        /// from these, so holes decay instead of flickering the slot (see `updateChartReadout`).
+        /// They outlive the readout itself — it needs values to fade out with.
+        @State var chartReadoutDate: Date? = nil
+        @State var chartReadoutDeterminationDate: Date? = nil
+        /// Whether the readout owns the meal slot. The one thing the fade is keyed on.
+        @State var isChartReadoutVisible = false
 
         @FetchRequest(fetchRequest: OverrideStored.fetch(
             NSPredicate.lastActiveOverride,
@@ -82,7 +92,8 @@ extension Home {
                     displayXgridLines: state.displayXgridLines,
                     displayYgridLines: state.displayYgridLines,
                     thresholdLines: state.thresholdLines,
-                    state: state
+                    state: state,
+                    selection: $chartSelection
                 )
             }
             // enforce the zone budget; panes flex within it
@@ -199,11 +210,16 @@ extension Home {
                 }
 
                 /// device session lanes (CGM + pump) above the chart; replaces the
-                /// bobble sensor arc and the standalone pump panel
-                deviceLanes
+                /// bobble sensor arc and the standalone pump panel. While the chart is
+                /// scrubbed they give way to its readout (`deviceLanesOrChartReadout`).
+                deviceLanesOrChartReadout
                     .frame(height: HomeLayout.deviceLanesHeight)
-                    .padding(.horizontal, 10)
                     .padding(.bottom, HomeLayout.deviceLanesGap)
+                    // Fades the readout in and out. Keyed on visibility, not on the date: a
+                    // scrub step leaves the flag alone, so only the swap animates and the
+                    // values inside keep updating unanimated.
+                    .animation(ChartSelectionLookup.readoutFade, value: isChartReadoutVisible)
+                    .task(id: chartSelection) { await updateChartReadout() }
 
                 mainChart(geo: geo)
             }
