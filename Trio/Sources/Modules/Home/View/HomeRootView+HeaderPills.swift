@@ -2,6 +2,24 @@ import SwiftUI
 
 // MARK: - Header pills, device lanes, and basal tag (redesign grafted onto Home Layout v2)
 
+/// Moved here from `LoopView.swift` on 2026-09-15, when the loop pill was switched to
+/// upstream's dosing-mode design wholesale. The loop pill no longer uses it; the IOB,
+/// COB and eventual-BG pills below still do.
+///
+/// Shared geometry for the four pills flanking the bobble (IOB, COB, loop,
+/// eventual BG). Every pill sizes its text slot to the same hidden template
+/// string — the widest realistic value — so all four render identically
+/// without a hard-coded width that would leave dead space or fight Dynamic
+/// Type.
+enum HeaderPill {
+    /// Sized for the common case; rarer wide values ("12.35 U", "looping")
+    /// compress via `minimumScaleFactor` instead of stretching every pill.
+    static let widthTemplate = "8.88 U"
+    static let iconWidth: CGFloat = 16
+    static let verticalPadding: CGFloat = 7
+    static let horizontalPadding: CGFloat = 9
+}
+
 extension Home.RootView {
     /// Read-only readout: a faint fill capsule — no stroke, no glass rim — so it
     /// reads as a quiet container rather than a hard pill. Glass is reserved for
@@ -200,16 +218,23 @@ extension Home.RootView {
             /// Loop pill — tinted/stroked to mark it tappable; the ghost readout
             /// pills (IOB/COB/eventual) stay fill-only.
             LoopView(
-                closedLoop: state.closedLoop,
+                dosingMode: state.dosingMode,
                 timerDate: state.timerDate,
                 isLooping: state.isLooping,
                 lastLoopDate: state.lastLoopDate,
                 manualTempBasal: state.manualTempBasal,
+                lastGlucoseDate: state.lastGlucoseDate,
+                lastPumpCommsDate: state.lastPumpCommsDate,
+                hasDeviceIssue: state.hasDeviceIssue,
                 determination: state.determinationsFromPersistence
             )
             .onTapGesture {
                 state.isLoopStatusPresented = true
             }
+            // Same accessibility as upstream's call site in HomeRootView+Header.swift.
+            .accessibilityAddTraits(.isButton)
+            .accessibilityHint(Text(String(localized: "Opens loop status", comment: "Accessibility hint")))
+            .accessibilityAction { state.isLoopStatusPresented = true }
 
             headerReadoutPill(
                 iconSystemName: "arrow.right.circle",
