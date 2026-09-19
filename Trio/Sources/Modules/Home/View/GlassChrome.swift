@@ -13,6 +13,47 @@ enum GlassChrome {
     /// Stand-in for glass/material when Reduce Transparency is on: no blur, so
     /// nothing behind the panel bleeds through.
     static let opaqueFill = Color(.secondarySystemGroupedBackground)
+
+    /// Glass variant for the large Home panels — device lanes, the adjustment
+    /// and stats banners, the chart readout.
+    ///
+    /// iOS 27 renders `.regular` markedly more frosted than iOS 26 did. The
+    /// material is system-drawn, so nothing on our side changed.
+    ///
+    /// Tried in order on device, 2026-09-18:
+    /// - `.regular` — the frosted panel iOS 27 gives by default.
+    /// - `.clear` — drops the dimming pass, so the rim reads glassier, but the
+    ///   interior wash stays: over a flat dark background the material's own
+    ///   scattering has nothing to refract and resolves to a pale haze. Confirmed
+    ///   not to be the tint — the untinted stats banner washed out identically.
+    /// - `.identity` — no material at all. The only chrome left is the
+    ///   `strokeBorder` overlay below (`Color.primary` at `strokeOpacity * 0.6`,
+    ///   1pt — white ~18% on dark).
+    ///
+    /// Deliberately *not* applied to `GlassCapsuleBackground` or
+    /// `GlassCircleBackground`: the header pills and the alarms button are small
+    /// enough that `.regular` still reads well, and they were not part of the
+    /// complaint.
+    ///
+    /// Revert by changing this one property back to `.regular`.
+    @available(iOS 26.0, *) static var panelGlass: Glass { .identity }
+
+    /// Compensation for `panelGlass == .identity`. Every call site's
+    /// `tintOpacity` / `strokeOpacity` was tuned against a glass body that added
+    /// its own luminance; with no material they read far weaker than intended.
+    ///
+    /// Set both back to `1` / `0` if a real material is ever restored — they
+    /// exist only because the panels are now unlit.
+    ///
+    /// A flat tint fill on the dark background is dimmer than the same tint
+    /// applied to glass was.
+    static let panelTintBoost: Double = 1.5
+
+    /// With no body the rim is the *only* chrome, so it cannot be a hairline.
+    /// The adjustment panel's empty state passes `strokeOpacity: 0.08`, which
+    /// the 0.6 rim factor turned into 0.048 — invisible. A deliberate `0` is
+    /// still honoured (the concurrent adjustment panel draws its own halves).
+    static let panelMinRimOpacity: Double = 0.15
 }
 
 /// Glass panel background with optional tint; pre-26 falls back to
@@ -36,6 +77,13 @@ struct GlassPanelBackground: ViewModifier {
         reduceTransparency || colorSchemeContrast == .increased
     }
 
+    /// Rim opacity for the no-material panel: the call site's value through the
+    /// 0.6 accent factor, but never so faint it disappears. `0` stays `0` so a
+    /// call site can still opt out of the rim entirely.
+    private var rimOpacity: Double {
+        strokeOpacity == 0 ? 0 : max(strokeOpacity * 0.6, GlassChrome.panelMinRimOpacity)
+    }
+
     func body(content: Content) -> some View {
         // Reduce Transparency / Increase Contrast skip the glass and material paths entirely
         // for a fully opaque panel; the glass path in particular cannot be made opaque.
@@ -43,13 +91,25 @@ struct GlassPanelBackground: ViewModifier {
             content.background(opaquePanel)
         } else if #available(iOS 26.0, *) {
             content
+                // The tint is drawn here rather than handed to `Glass.tint(_:)`:
+                // `.identity` has no material to carry it, so a tinted panel
+                // (an active adjustment, a bolus in progress, a device lane
+                // wanting attention) would otherwise lose its colour entirely
+                // and keep only the rim. Layering is glass → tint → content, so
+                // this stays correct if `panelGlass` goes back to `.regular` or
+                // `.clear` — the tint then sits above the material instead of
+                // inside it, which reads near-identically.
+                .background(GlassChrome.panelShape.fill(
+                    (tint ?? .clear).opacity(tintOpacity * GlassChrome.panelTintBoost)
+                ))
                 .glassEffect(
-                    tint.map { Glass.regular.tint($0.opacity(tintOpacity)) } ?? .regular,
+                    GlassChrome.panelGlass,
                     in: .rect(cornerRadius: GlassChrome.panelCornerRadius, style: .continuous)
                 )
-                // faint rim keeps tinted panels legible on busy backgrounds
+                // with no material behind it the rim carries the panel, so it is
+                // floored rather than left as the hairline accent it once was
                 .overlay(GlassChrome.panelShape.strokeBorder(
-                    (tint ?? Color.primary).opacity(strokeOpacity * 0.6),
+                    (tint ?? Color.primary).opacity(rimOpacity),
                     lineWidth: strokeWidth
                 ))
         } else {
