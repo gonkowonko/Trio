@@ -203,9 +203,22 @@ extension Home {
                 .frame(height: HomeLayout.headerHeight)
                 // global snooze control lives in the top-trailing corner, apart
                 // from the readout pills (overlay, so it never shifts the zones)
+                //
+                // NOTE: this inset is coupled to `HomeLayout.headerHeight`, and the sign
+                // is easy to get backwards. The header content is a centred ZStack while
+                // this overlay is pinned to the frame's *top* edge, so shrinking the slot
+                // raises the content but not the bell — leaving the bell sitting lower
+                // relative to the pill column, not higher.
+                //
+                // It was 2 when the slot was 172. Dropping the slot to 154 raised the
+                // content by (172 - 154) / 2 = 9, so the bell has to rise by the same 9:
+                // 2 - 9 = -7. Negative is correct and intentional.
+                //
+                // Rule: when `headerHeight` changes by D, change this by D / 2 with the
+                // *same* sign — shrink the slot, shrink the inset.
                 .overlay(alignment: .topTrailing) {
                     alarmsButton
-                        .padding(.top, 2)
+                        .padding(.top, -7)
                         .padding(.trailing, 10)
                 }
 

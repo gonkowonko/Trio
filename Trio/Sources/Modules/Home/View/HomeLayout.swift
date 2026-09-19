@@ -2,9 +2,20 @@ import CoreGraphics
 
 /// Fixed zone heights for the non-scrolling Home dashboard; the chart takes the remainder.
 enum HomeLayout {
-    /// header slot: loop/evBG pills / glucose bobble / IOB-COB pills; includes
-    /// room for the sensor status tag overhanging the bobble
-    static let headerHeight: CGFloat = 172
+    /// header slot: loop/evBG pills / glucose bobble / IOB-COB pills.
+    ///
+    /// Upstream is 172 because its sensor status tag overhangs the bobble. This
+    /// layout moved that tag onto the CGM device lane (2026-09-08), so the room
+    /// reserved for it became dead air between the bobble and the lanes — the
+    /// gap below the lanes is a deliberate `deviceLanesGap`, but the gap above
+    /// them is only ever whatever slack is left in this fixed slot, so the two
+    /// stopped matching. 154 leaves 24pt around the 130pt bobble.
+    ///
+    /// Still a fixed slot on purpose: header state changes must never reflow the
+    /// zones below. It also feeds the chart's height in `HomeRootView`, so the
+    /// 18pt freed here goes to the chart. On merge, keep this value — upstream's
+    /// 172 is correct for upstream and wrong here.
+    static let headerHeight: CGFloat = 154
     /// device session lanes (CGM + pump), each on its own glass card, sitting
     /// above the chart; replaces the bobble sensor arc and standalone pump panel
     static let deviceLanesHeight: CGFloat = 62
