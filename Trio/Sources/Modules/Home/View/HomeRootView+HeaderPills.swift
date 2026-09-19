@@ -18,6 +18,11 @@ enum HeaderPill {
     static let iconWidth: CGFloat = 16
     static let verticalPadding: CGFloat = 7
     static let horizontalPadding: CGFloat = 9
+    /// Extra padding on each side of the readout pills only. The loop pill's outline is
+    /// upstream's centred `.stroke(lineWidth: 2)`, which overhangs its frame by 1pt all
+    /// round; growing the readouts by the same 1pt lines their outside edges up with it,
+    /// without touching `LoopView`.
+    static let loopOutlineOverhang: CGFloat = 1
 }
 
 extension Home.RootView {
@@ -45,8 +50,8 @@ extension Home.RootView {
             .lineLimit(1)
             .minimumScaleFactor(0.85)
         }
-        .padding(.vertical, HeaderPill.verticalPadding)
-        .padding(.horizontal, HeaderPill.horizontalPadding)
+        .padding(.vertical, HeaderPill.verticalPadding + HeaderPill.loopOutlineOverhang)
+        .padding(.horizontal, HeaderPill.horizontalPadding + HeaderPill.loopOutlineOverhang)
         .background(Capsule().fill(Color.primary.opacity(0.05)))
     }
 
@@ -211,12 +216,12 @@ extension Home.RootView {
     }
 
     @ViewBuilder func rightHeaderPanel(_: GeometryProxy) -> some View {
-        // Right-aligned so every pill keeps its right edge on the margin; a wider
-        // loop pill ("looping" / "Manual") then grows leftward instead of
-        // shoving the narrower eventual pill off the edge.
-        VStack(alignment: .trailing, spacing: 12) {
-            /// Loop pill — tinted/stroked to mark it tappable; the ghost readout
-            /// pills (IOB/COB/eventual) stay fill-only.
+        // Centred, as upstream's own panel is ("Centre the loop ring over the forecast
+        // row"). Outside closed loop upstream's LoopView is a bare ring with no capsule,
+        // and trailing alignment pinned it flush against the screen edge.
+        VStack(alignment: .center, spacing: 12) {
+            /// Loop status — upstream's `LoopView`, unmodified; the ghost readout pills
+            /// (IOB/COB/eventual) stay fill-only.
             LoopView(
                 dosingMode: state.dosingMode,
                 timerDate: state.timerDate,
