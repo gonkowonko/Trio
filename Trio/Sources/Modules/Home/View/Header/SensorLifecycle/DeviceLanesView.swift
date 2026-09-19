@@ -2,6 +2,21 @@ import CoreData
 import LoopKit
 import SwiftUI
 
+/// Vertical rhythm inside a lane. The two text rows sit between the pill edge and
+/// the bar, and only these two values separate them: `cardPadding` above and below
+/// the stack, `rowSpacing` between each row and the bar. Equal values put the text
+/// midway; they were 9 and 4, which read as the text hugging the bar.
+///
+/// **They must sum to 13.** The card is a fixed `HomeLayout.deviceLanesHeight`
+/// (62), and 62 − 2·padding − 2·spacing is what the rows themselves get: 36, for
+/// the name row, the 6pt bar and the readout row. Raising both — rather than
+/// trading one against the other — squeezes the text instead of moving it, unless
+/// `deviceLanesHeight` grows to match, which costs the chart.
+enum DeviceLaneMetrics {
+    static let cardPadding: CGFloat = 6.5
+    static let rowSpacing: CGFloat = 6.5
+}
+
 /// Two session lanes above the chart — one per device, each on its own glass
 /// card sitting *side by side*. Each lane is three rows: `[icon] name` on top,
 /// a full-width draining bar in the middle, then `units … countdown` on the
@@ -134,7 +149,7 @@ struct DeviceLanesView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 // three compact rows fit the same card height
                 .padding(.horizontal, 16)
-                .padding(.vertical, 9)
+                .padding(.vertical, DeviceLaneMetrics.cardPadding)
                 .glassPanel(tint: tint, tintOpacity: 0.18, strokeOpacity: 0.30)
                 .contentShape(Rectangle())
         }
@@ -435,7 +450,7 @@ private struct DeviceLaneView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: DeviceLaneMetrics.rowSpacing) {
             // Row 1: icon + device name (identity, neutral). Small and grey,
             // matching the "No Active Adjustment" panel; yields first (ellipsis).
             HStack(spacing: 6) {
