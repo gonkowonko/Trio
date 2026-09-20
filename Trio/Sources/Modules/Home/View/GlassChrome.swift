@@ -81,7 +81,16 @@ struct GlassPanelBackground: ViewModifier {
     /// 0.6 accent factor, but never so faint it disappears. `0` stays `0` so a
     /// call site can still opt out of the rim entirely.
     private var rimOpacity: Double {
-        strokeOpacity == 0 ? 0 : max(strokeOpacity * 0.6, GlassChrome.panelMinRimOpacity)
+        if strokeOpacity == 0 { return 0 }
+        // `tintOpacity: 0` is a caller opting out of the fill entirely, which makes the
+        // rim the *only* thing carrying the panel — so it is used at full strength. The
+        // 0.6 factor below only makes sense while the rim is an accent drawn over a
+        // fill; applied here it would cap an outline at 0.6 and leave it looking washed.
+        // Deliberately keyed on an explicit 0 rather than "no tint", so panels that just
+        // happen to pass `tint: nil` (the stats banner, the empty adjustment panel) keep
+        // their existing accent rim.
+        if tintOpacity == 0 { return strokeOpacity }
+        return max(strokeOpacity * 0.6, GlassChrome.panelMinRimOpacity)
     }
 
     func body(content: Content) -> some View {

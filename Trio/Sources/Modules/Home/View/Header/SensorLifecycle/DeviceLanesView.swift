@@ -15,6 +15,38 @@ import SwiftUI
 enum DeviceLaneMetrics {
     static let cardPadding: CGFloat = 6.5
     static let rowSpacing: CGFloat = 6.5
+
+    /// Warning / critical / grace lanes are **outlined**, not washed.
+    ///
+    /// The tile tint used to be a third signal on top of two that already work: the
+    /// bar fills with `phase.fillColor` (or `loopRed` in grace) and the countdown
+    /// takes `accentColor`. It also contradicted this file's own rule that the device
+    /// name is an identity readout and "stays neutral in every phase" — a 27% wash
+    /// covered the name along with everything else, and cost contrast on the text it
+    /// covered.
+    ///
+    /// So an alert lane passes `tintOpacity: 0`, which drops the fill and (see
+    /// `GlassPanelBackground.rimOpacity`) promotes the rim to full strength. Healthy
+    /// lanes are untouched: they pass no tint, so their fill was already invisible.
+    ///
+    /// Colour alone separates an alert lane from a healthy one — the rim stays the
+    /// same 1pt width throughout. 2pt was tried on device 2026-09-20 and read as
+    /// shouting: at this size the extra weight adds urgency the colour already
+    /// carries, and the lane starts competing with the bobble.
+    ///
+    /// Both rims are 1pt; only their opacity differs, and that contrast is what does
+    /// the signalling now the fill is gone. 0.9 against the healthy 0.18 was a 5×
+    /// step, which read as a *thicker* line rather than a brighter one — at 3x a 1pt
+    /// stroke is ~3 physical pixels, fully saturated at 0.9 and half dissolved into
+    /// the background at 0.18. 0.6 keeps the amber unmistakable without letting the
+    /// lane dominate the screen.
+    ///
+    /// Set `alertRimOpacity` to 0 to fall back to an unoutlined lane.
+    static let alertRimOpacity: Double = 0.6
+    /// Healthy lane: a quiet neutral rim, the value these panels have always used.
+    /// Resolves to 0.18 through `rimOpacity`'s 0.6 accent factor, which the alert
+    /// path deliberately bypasses.
+    static let restingRimOpacity: Double = 0.30
 }
 
 /// Two session lanes above the chart — one per device, each on its own glass
@@ -150,7 +182,17 @@ struct DeviceLanesView: View {
                 // three compact rows fit the same card height
                 .padding(.horizontal, 16)
                 .padding(.vertical, DeviceLaneMetrics.cardPadding)
-                .glassPanel(tint: tint, tintOpacity: 0.18, strokeOpacity: 0.30)
+                // Healthy lanes keep the quiet neutral rim they always had (their `tint` is
+                // nil, so the fill was already invisible). An alert lane passes
+                // `tintOpacity: 0`, which drops the fill and promotes the rim to a full
+                // outline — see `DeviceLaneMetrics`.
+                .glassPanel(
+                    tint: tint,
+                    tintOpacity: tint == nil ? 0.18 : 0,
+                    strokeOpacity: tint == nil
+                        ? DeviceLaneMetrics.restingRimOpacity
+                        : DeviceLaneMetrics.alertRimOpacity
+                )
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -443,6 +485,33 @@ private struct DeviceLaneView: View {
 
     private static let barHeight: CGFloat = 6
 
+    /// A leading status glyph (clock for "running out", triangle for a fault) was
+    /// tried on device 2026-09-20 and removed: against the coloured rim, bar and
+    /// countdown it added nothing, and it cost ~16pt in a half-width lane where the
+    /// device name already truncates.
+    ///
+    /// It was argued for as the lane's only non-colour cue. That was wrong — the bar
+    /// is a *draining* gauge, so an expiring device already reads as a nearly empty
+    /// bar whatever its colour. Don't reintroduce it on that reasoning.
+
+    /// The accent while this lane needs attention, `nil` when it is healthy.
+    ///
+    /// Deliberately the same precedence as `DeviceLanesView.sensorCardTint`, which
+    /// drives the outline — so the icon is coloured in exactly the cases the lane is
+    /// outlined, and the two can never disagree about whether something is wrong.
+    ///
+    /// A CGM status whose own colour is `.secondary` is informational, not an alert,
+    /// and is filtered out here for the same reason the card tint filters it.
+    private var alertAccent: Color? {
+        if bar?.graceRemaining != nil { return .loopRed }
+        if let labelColorOverride, labelColorOverride != .secondary { return labelColorOverride }
+        switch phase {
+        case .critical,
+             .warning: return phase.color
+        case .normal: return nil
+        }
+    }
+
     /// Once the grace window is running the lane's accent goes red — the
     /// only time red appears; phases only reach orange.
     private var accentColor: Color {
@@ -454,9 +523,16 @@ private struct DeviceLaneView: View {
             // Row 1: icon + device name (identity, neutral). Small and grey,
             // matching the "No Active Adjustment" panel; yields first (ellipsis).
             HStack(spacing: 6) {
+                // Takes the accent while the lane needs attention, as this file's header
+                // has always specified — the code had drifted to a hardcoded `.secondary`.
+                // Falls back to that grey when healthy, so a normal lane is unchanged:
+                // `accentColor` is `.primary` in the normal phase, and using it unguarded
+                // would brighten every healthy icon to white.
+                //
+                // The *name* beside it stays neutral in every phase — identity, not status.
                 Image(systemName: iconSystemName)
                     .font(.caption)
-                    .foregroundStyle(Color.secondary)
+                    .foregroundStyle(alertAccent ?? Color.secondary)
 
                 Text(name)
                     .font(.footnote).fontWeight(.medium).fontDesign(.rounded)
