@@ -177,26 +177,30 @@ extension Home.RootView {
         let kind: BasalTagKind
     }
 
+    /// What the pump is actually delivering right now, from upstream's resolver (#1556).
+    ///
+    /// This used to fall back to `state.tempBasals.last` whenever
+    /// `apsManager.isScheduledBasal` wasn't true — the newest temp in history whether or
+    /// not it was still running. The flag protected it when the pump reported scheduled
+    /// delivery promptly, but a temp that expired on its own, or the gap before the next
+    /// pump status, left a stale rate on screen: the bug upstream fixed as #1544.
+    /// `activeBasalDelivery` works each temp's end time out from its start and duration
+    /// and resolves against the real clock, and it is backed by upstream's tests.
+    ///
+    /// Only the data source changed. The tag's design — fill vs outline for loop-set vs
+    /// scheduled, amber for a manual temp, the Suspended capsule — is untouched.
     var basalTagContent: BasalTagContent? {
-        guard let apsManager = state.apsManager else {
+        switch state.activeBasalDelivery {
+        case .none,
+             .suspended:
+            // suspended has its own capsule in `basalRateTag`
             return nil
+        case let .temp(rate):
+            let isManual = state.apsManager?.isManualTempBasal ?? false
+            return BasalTagContent(rate: rate, kind: isManual ? .manualTemp : .temp)
+        case let .scheduled(rate):
+            return BasalTagContent(rate: rate, kind: .scheduled)
         }
-
-        if apsManager.isScheduledBasal == true {
-            guard let scheduledRate = scheduledBasalDeliveryRate(at: Date())?.decimalValue else {
-                return nil
-            }
-            return BasalTagContent(rate: scheduledRate, kind: .scheduled)
-        }
-
-        guard let tempRate = state.tempBasals.last?.tempBasal?.rate as? Decimal else {
-            return nil
-        }
-
-        return BasalTagContent(
-            rate: tempRate,
-            kind: apsManager.isManualTempBasal ? .manualTemp : .temp
-        )
     }
 
     // Returns the scheduled basal rate for the current time based on the saved basal scheduled.
@@ -265,7 +269,7 @@ extension Home.RootView {
         /// unwrapped optional, so unwrap it safely — this tag is evaluated on
         /// every chart layout pass, possibly before injection has resolved it.
         if let apsManager = state.apsManager, apsManager.isScheduledBasal != nil {
-            if apsManager.isSuspended {
+            if state.activeBasalDelivery == .suspended {
                 /// Suspension is the loudest thing the strip can say, so
                 /// it takes the slot rather than leaving it empty.
                 basalTagCapsule(tint: .loopRed, filled: false) {
