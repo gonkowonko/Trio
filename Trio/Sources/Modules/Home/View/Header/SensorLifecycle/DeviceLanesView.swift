@@ -268,7 +268,7 @@ struct DeviceLanesView: View {
         let lowered = cgmStatus?.localizedMessage.lowercased()
         if let lowered, lowered.contains("warming up") || lowered.contains("warmup") {
             let text = cgmWarmupEndsAt
-                .map { SensorRemainingTimeFormatter.format(until: $0, now: timerDate) }
+                .map { DeviceLaneRemainingTimeFormatter.format(until: $0, now: timerDate) }
                 ?? String(localized: "Warmup", comment: "CGM warmup status (short, for the device lane)")
             return (text, .orange)
         }
@@ -299,15 +299,15 @@ struct DeviceLanesView: View {
             // period to the true end.
             if timerDate >= timeline.expiresAt {
                 return String(localized: "Grace", comment: "Device lane label prefix during the post-expiry grace period")
-                    + " " + SensorRemainingTimeFormatter.format(until: timeline.endsAt, now: timerDate)
+                    + " " + DeviceLaneRemainingTimeFormatter.format(until: timeline.endsAt, now: timerDate)
             }
-            return SensorRemainingTimeFormatter.format(until: timeline.expiresAt, now: timerDate)
+            return DeviceLaneRemainingTimeFormatter.format(until: timeline.expiresAt, now: timerDate)
         }
         if let expiresAt = sensorExpiresAt {
             if timerDate >= expiresAt {
                 return String(localized: "Replace sensor", comment: "Device lane label when the CGM session is fully over")
             }
-            return SensorRemainingTimeFormatter.format(until: expiresAt, now: timerDate)
+            return DeviceLaneRemainingTimeFormatter.format(until: expiresAt, now: timerDate)
         }
         return "--"
     }
@@ -374,9 +374,9 @@ struct DeviceLanesView: View {
         }
         if timerDate >= expiresAt {
             return String(localized: "Grace", comment: "Device lane label prefix during the post-expiry grace period")
-                + " " + SensorRemainingTimeFormatter.format(until: shutdownAt, now: timerDate)
+                + " " + DeviceLaneRemainingTimeFormatter.format(until: shutdownAt, now: timerDate)
         }
-        return SensorRemainingTimeFormatter.format(until: expiresAt, now: timerDate)
+        return DeviceLaneRemainingTimeFormatter.format(until: expiresAt, now: timerDate)
     }
 
     private var podSublabels: [DeviceLaneSublabel] {
@@ -627,6 +627,38 @@ private struct AddDeviceLaneView: View {
 }
 
 // MARK: - Previews
+
+/// The device lanes' remaining-time text: `2d 18h` over a day, `18h 59m` under
+/// one, `45m` under an hour.
+///
+/// A local copy of upstream's `SensorRemainingTimeFormatter` (in
+/// `CGMSensorDisplayState.swift`), differing only in the under-a-day case. That
+/// one keeps the two largest units and so drops the minutes whenever there are
+/// hours: 18 h 59 m read `18h`, an hour short of the truth. Copied rather than
+/// edited because its file exists upstream and this one does not, so the change
+/// can never conflict on a merge.
+///
+/// Over a day the minutes are still dropped, by choice (Gary, 2026-09-23): they
+/// add width and nothing a decision hangs on. Like the original it floors, so it
+/// never shows more time left than there is.
+enum DeviceLaneRemainingTimeFormatter {
+    static func format(until expiresAt: Date, now: Date = Date()) -> String {
+        let remaining = max(0, expiresAt.timeIntervalSince(now))
+        let totalMinutes = Int(remaining) / 60
+        let days = totalMinutes / (60 * 24)
+        let hours = (totalMinutes / 60) % 24
+        let minutes = totalMinutes % 60
+        let d = String(localized: "d", comment: "Abbreviation for Days")
+        let h = String(localized: "h", comment: "Abbreviation for Hours")
+        let m = String(localized: "m", comment: "Abbreviation for Minutes")
+        if days > 0, hours > 0 { return "\(days)\(d) \(hours)\(h)" }
+        if days > 0 { return "\(days)\(d)" }
+        if hours > 0, minutes > 0 { return "\(hours)\(h) \(minutes)\(m)" }
+        if hours > 0 { return "\(hours)\(h)" }
+        if minutes > 0 { return "\(minutes)\(m)" }
+        return "<" + "\u{00A0}" + "1" + "\u{00A0}" + m
+    }
+}
 
 #Preview("Lanes — G7 midlife, pod fresh") {
     let start = Date().addingTimeInterval(-5 * 24 * 3600)
