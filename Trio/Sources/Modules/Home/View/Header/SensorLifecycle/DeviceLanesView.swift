@@ -595,10 +595,10 @@ private struct DeviceLaneView: View {
 
                 Spacer(minLength: 6)
 
-                // LANE-WASH: bold while alerting so the countdown leads. Weight, not
-                // size — the 62pt card has no height to spare (see `DeviceLaneMetrics`).
+                // A heavier weight while alerting was tried (LANE-WASH, 2026-09-24) and
+                // dropped: with the wash and badge in place it added nothing.
                 Text(label)
-                    .font(.footnote).fontWeight(alertAccent == nil ? .semibold : .heavy).fontDesign(.rounded)
+                    .font(.footnote).fontWeight(.semibold).fontDesign(.rounded)
                     .foregroundStyle(labelColorOverride ?? accentColor)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
