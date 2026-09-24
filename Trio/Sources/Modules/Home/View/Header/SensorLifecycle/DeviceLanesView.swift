@@ -149,8 +149,7 @@ struct DeviceLanesView: View {
                         phase: sensorPhase,
                         label: sensorLabel,
                         labelColorOverride: sensorStatus?.color,
-                        sublabels: [],
-                        chip: sensorChip
+                        sublabels: []
                     )
                 } else {
                     AddDeviceLaneView(label: String(localized: "Add CGM"))
@@ -165,8 +164,7 @@ struct DeviceLanesView: View {
                         bar: podBar,
                         phase: podPhase,
                         label: podLabel,
-                        sublabels: podSublabels,
-                        chip: podChip
+                        sublabels: podSublabels
                     )
                 } else {
                     AddDeviceLaneView(label: String(localized: "Add pump"))
@@ -311,9 +309,9 @@ struct DeviceLanesView: View {
             }
             // Count down to expiry during normal life, then through the grace
             // period to the true end.
-            // LANE-WASH: the "Grace" prefix moved to the lane's chip.
             if timerDate >= timeline.expiresAt {
-                return DeviceLaneRemainingTimeFormatter.format(until: timeline.endsAt, now: timerDate)
+                return String(localized: "Grace", comment: "Device lane label prefix during the post-expiry grace period")
+                    + " " + DeviceLaneRemainingTimeFormatter.format(until: timeline.endsAt, now: timerDate)
             }
             return DeviceLaneRemainingTimeFormatter.format(until: timeline.expiresAt, now: timerDate)
         }
@@ -324,19 +322,6 @@ struct DeviceLanesView: View {
             return DeviceLaneRemainingTimeFormatter.format(until: expiresAt, now: timerDate)
         }
         return "--"
-    }
-
-    /// LANE-WASH: one-word state chip beside the name. Nil when healthy, and nil
-    /// while a CGM status message owns the readout — the message already says it.
-    private var sensorChip: String? {
-        if sensorStatus != nil { return nil }
-        if let timeline = sensorTimeline {
-            if timerDate >= timeline.endsAt { return DeviceLaneChipText.expired }
-            if timerDate >= timeline.expiresAt { return DeviceLaneChipText.grace }
-        } else if let expiresAt = sensorExpiresAt, timerDate >= expiresAt {
-            return DeviceLaneChipText.expired
-        }
-        return sensorPhase == .normal ? nil : DeviceLaneChipText.expiring
     }
 
     // MARK: - Pod lane
@@ -399,23 +384,11 @@ struct DeviceLanesView: View {
         if timerDate >= shutdownAt {
             return String(localized: "Replace pod", comment: "View/Header when pod expired")
         }
-        // LANE-WASH: the "Grace" prefix moved to the lane's chip.
         if timerDate >= expiresAt {
-            return DeviceLaneRemainingTimeFormatter.format(until: shutdownAt, now: timerDate)
+            return String(localized: "Grace", comment: "Device lane label prefix during the post-expiry grace period")
+                + " " + DeviceLaneRemainingTimeFormatter.format(until: shutdownAt, now: timerDate)
         }
         return DeviceLaneRemainingTimeFormatter.format(until: expiresAt, now: timerDate)
-    }
-
-    /// LANE-WASH: as `sensorChip`. A clockless pump only warns off the reservoir,
-    /// so its warning reads "Low" rather than "Expiring".
-    private var podChip: String? {
-        if pumpStatusHighlightMessage != nil { return nil }
-        if let expiresAt = podExpiresAt {
-            if timerDate >= expiresAt.addingTimeInterval(Self.podGraceWindow) { return DeviceLaneChipText.expired }
-            if timerDate >= expiresAt { return DeviceLaneChipText.grace }
-            return podPhase == .normal ? nil : DeviceLaneChipText.expiring
-        }
-        return podPhase == .normal ? nil : DeviceLaneChipText.low
     }
 
     private var podSublabels: [DeviceLaneSublabel] {
@@ -521,8 +494,6 @@ private struct DeviceLaneView: View {
     /// its own severity color); otherwise the label follows the phase accent.
     var labelColorOverride: Color? = nil
     let sublabels: [DeviceLaneSublabel]
-    /// LANE-WASH: short state word shown as a chip after the name; nil when healthy.
-    var chip: String? = nil
 
     private static let barHeight: CGFloat = 6
 
@@ -596,11 +567,6 @@ private struct DeviceLaneView: View {
                     .truncationMode(.tail)
 
                 Spacer(minLength: 0)
-
-                // LANE-WASH: the name truncates before the chip does.
-                if let chip, let alertAccent {
-                    DeviceLaneStateChip(text: chip, accent: alertAccent)
-                }
             }
 
             // Row 2: the draining gauge, full width.
@@ -667,27 +633,7 @@ private struct DeviceLaneView: View {
     }
 }
 
-// MARK: - LANE-WASH: alert badge and chip
-
-/// LANE-WASH: chip vocabulary. One word each, so the chip never pushes the name
-/// out entirely.
-enum DeviceLaneChipText {
-    static var grace: String {
-        String(localized: "Grace", comment: "Device lane label prefix during the post-expiry grace period")
-    }
-
-    static var expiring: String {
-        String(localized: "Expiring", comment: "Device lane chip when a sensor or pod is near the end of its life")
-    }
-
-    static var expired: String {
-        String(localized: "Expired", comment: "Device lane chip once a sensor or pod session is fully over")
-    }
-
-    static var low: String {
-        String(localized: "Low", comment: "Device lane chip when a pump reservoir is running low")
-    }
-}
+// MARK: - LANE-WASH: alert badge
 
 /// LANE-WASH: filled circle in the lane's accent with a dark glyph, standing in
 /// for the device icon while the lane needs attention. Sized to the footnote line
@@ -702,24 +648,6 @@ private struct DeviceLaneStatusBadge: View {
             .foregroundStyle(Color.black.opacity(0.75))
             .frame(width: 15, height: 15)
             .background(Circle().fill(accent))
-    }
-}
-
-/// LANE-WASH: the one-word state chip. A tinted capsule rather than a solid one,
-/// so it sits under the badge in the lane's visual order.
-private struct DeviceLaneStateChip: View {
-    let text: String
-    let accent: Color
-
-    var body: some View {
-        Text(text)
-            .font(.caption2).fontWeight(.semibold).fontDesign(.rounded)
-            .foregroundStyle(accent)
-            .lineLimit(1)
-            .fixedSize()
-            .padding(.horizontal, 6)
-            .padding(.vertical, 1.5)
-            .background(Capsule().fill(accent.opacity(0.22)))
     }
 }
 
