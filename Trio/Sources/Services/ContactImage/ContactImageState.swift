@@ -9,6 +9,11 @@ struct ContactImageState: Codable {
     /// Used to mute those pieces once the CGM reading goes stale.
     var glucoseDate: Date?
     var lastLoopDate: Date?
+    /// Both feed `LoopFreshness` alongside `lastLoopDate`, so the ring mirrors the
+    /// Home loop pill's grey (open loop) and blue (manual temp) states rather than
+    /// showing a confident green/amber/red for a loop that is not actually driving.
+    var closedLoop: Bool = false
+    var manualTempBasal: Bool = false
     var iob: Decimal?
     var iobText: String?
     var cob: Decimal?

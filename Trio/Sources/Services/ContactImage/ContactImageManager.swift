@@ -26,45 +26,37 @@ final class BaseContactImageManager: NSObject, ContactImageManager, Injectable {
     @Injected() private var fileStorage: FileStorage!
     @Injected() private var iobService: IOBService!
     @Injected() private var apsManager: APSManager!
+    @Injected() private var broadcaster: Broadcaster!
 
     /// Time-derived visual state that changes even when no new data arrives: the
-    /// loop-ring staleness band (green/yellow/red) and whether the CGM reading is
-    /// stale (muted grey). Used to decide when a periodic refresh actually changes
-    /// the rendered image, so the timer can skip redundant contact-store writes.
+    /// loop ring's colour and whether the CGM reading has aged into its muted
+    /// treatment. Used to decide when a periodic refresh would actually change the
+    /// rendered image, so the timer can skip redundant contact-store writes.
     private struct RenderStaleness: Equatable {
-        enum LoopBand {
-            case noLoop // no loop date yet -> gray
-            case fresh // <= 5 min -> green
-            case warning // <= 10 min -> yellow
-            case stale // > 10 min -> red
-        }
-
-        let loopBand: LoopBand
-        /// Glucose staleness band (fresh / warning / urgent) drives the strike-through
-        /// colour, so the periodic refresh must re-render when it changes too.
-        let glucoseStaleness: ContactPicture.GlucoseStaleness
-
-        /// Must match `ContactPicture.Config.lag`.
-        private static let loopLag: TimeInterval = 30
+        /// Held as the very value `ContactPicture.ringColor` classifies, rather than
+        /// as a private re-derivation of it. This used to be a third hand-written
+        /// copy of the 30s lag and the 5/10-minute ladder, annotated "must match
+        /// `ContactPicture.Config.lag`" — a promise the compiler could not keep,
+        /// since that constant was `private`. Had the two drifted, this gate would
+        /// have reported "unchanged" for a boundary the renderer had crossed and
+        /// frozen the ring on the wrong colour indefinitely.
+        let loop: LoopFreshness
+        /// The glucose band drives the fade on the value, trend and delta — and, at
+        /// `.expired`, replaces them with dashes — so the periodic refresh must
+        /// re-render when it changes too. Every band here draws differently, so each
+        /// transition earns its contact-store write.
+        let glucoseFreshness: GlucoseFreshness
 
         static func current(for state: ContactImageState, now: Date = Date()) -> RenderStaleness {
-            let loopBand: LoopBand
-            if let lastLoopDate = state.lastLoopDate {
-                let delta = now.timeIntervalSince(lastLoopDate) - loopLag
-                if delta <= 5.minutes.timeInterval {
-                    loopBand = .fresh
-                } else if delta <= 10.minutes.timeInterval {
-                    loopBand = .warning
-                } else {
-                    loopBand = .stale
-                }
-            } else {
-                loopBand = .noLoop
-            }
-
-            let glucoseStaleness = ContactPicture.GlucoseStaleness.classify(glucoseDate: state.glucoseDate, now: now)
-
-            return RenderStaleness(loopBand: loopBand, glucoseStaleness: glucoseStaleness)
+            RenderStaleness(
+                loop: LoopFreshness.classify(
+                    lastLoopDate: state.lastLoopDate,
+                    now: now,
+                    closedLoop: state.closedLoop,
+                    manualTempBasal: state.manualTempBasal
+                ),
+                glucoseFreshness: GlucoseFreshness.classify(glucoseDate: state.glucoseDate, now: now)
+            )
         }
     }
 
@@ -80,21 +72,65 @@ final class BaseContactImageManager: NSObject, ContactImageManager, Injectable {
     private var coreDataPublisher: AnyPublisher<Set<NSManagedObjectID>, Never>?
     private var subscriptions = Set<AnyCancellable>()
 
+    /// Token for the `didBecomeActive` observer, held so it can be removed. The
+    /// block-based `addObserver` is not cleaned up by the observer's deallocation
+    /// the way the selector-based API is — dropping the token leaks the block for
+    /// the lifetime of the notification center.
+    private var foregroundObserver: NSObjectProtocol?
+
     /// Periodic timer that re-renders contact images purely so staleness advances
     /// (green -> yellow -> red) when no new glucose / IOB / determination arrives.
-    private let staleRefreshTimer = DispatchTimer(timeInterval: 60)
+    ///
+    /// 30s to match `Home.StateModel`'s own tick, which is what repaints the loop
+    /// pill. Both surfaces sample on independent timers, so they can still land on
+    /// opposite sides of a boundary for up to one tick — matching the cadence keeps
+    /// that worst case to ~30s instead of ~60s. Ticks are cheap: the pre-check below
+    /// is a main-actor hop and a struct comparison, and does no I/O when the bands
+    /// have not moved.
+    private let staleRefreshTimer = DispatchTimer(timeInterval: 30)
 
     /// The staleness last written to the contact store, so the timer can skip
     /// redundant `CNSaveRequest`s while the rendered result would be unchanged.
     private var lastRenderedStaleness: RenderStaleness?
 
-    /// What a queued render is allowed to skip.
-    private enum RenderRequest {
-        /// New data arrived — render and write to the contact store unconditionally.
-        case full
-        /// Staleness timer tick — skip the write if the staleness band is unchanged.
+    /// What a queued render is allowed to skip. Ordered so coalescing keeps the
+    /// stronger request: `full` > `stalenessOnly`.
+    private enum RenderRequest: Int, Comparable {
+        /// Staleness timer tick — skip the pass if the staleness band is unchanged.
         case stalenessOnly
+        /// New data arrived — render, but skip any contact whose photo in the store
+        /// is already byte-identical to the new one (CONTACT-CYCLE).
+        case full
+
+        static func < (lhs: RenderRequest, rhs: RenderRequest) -> Bool {
+            lhs.rawValue < rhs.rawValue
+        }
     }
+
+    /// CONTACT-CYCLE: how long after the loop lands to render. Long enough for what
+    /// follows `Loop succeeded` in the same cycle — `reportEnacted`, the IOB refresh it
+    /// triggers, the Nightscout "uploaded" flag written back to the determination —
+    /// which the 25 Sep logs put within ~2s.
+    private static let loopSettleDelay: TimeInterval = 5
+
+    /// CONTACT-CYCLE: how long any other data event waits for the loop before
+    /// rendering anyway. The loop normally lands 7-10s after a reading and pulls the
+    /// render in to `loopSettleDelay`; this only fires on its own when the loop fails
+    /// or doesn't run, or for data that changes outside a cycle (a manual bolus).
+    private static let loopFallbackDelay: TimeInterval = 30
+
+    /// CONTACT-CYCLE: when the armed render is due, or nil if none is armed. Never
+    /// pushed later by a newer event — only pulled earlier — so a steady trickle of
+    /// events cannot starve it the way a debounce can. Main-actor access only.
+    private var armedRenderDeadline: Date?
+    private var armedRenderTask: Task<Void, Never>?
+
+    /// CONTACT-CYCLE: held while a render is armed, so iOS doesn't suspend the app
+    /// inside the wait and lose the render until the next wake. That is the failure
+    /// that sank the Live Activity's 6s debounce on 2026-08-18. Costs a few seconds
+    /// of extra residency per cycle at most, and only when nothing else is keeping
+    /// the app awake. Main-actor access only.
+    private var armedRenderBackgroundTask: UIBackgroundTaskIdentifier = .invalid
 
     /// The render waiting to run behind the one currently executing, if any.
     /// Requests arriving while one is queued coalesce into it instead of piling
@@ -131,6 +167,13 @@ final class BaseContactImageManager: NSObject, ContactImageManager, Injectable {
         registerRenderTriggers()
         startStaleRefreshTimer()
         registerForegroundRefresh()
+        broadcaster.register(SettingsObserver.self, observer: self)
+    }
+
+    deinit {
+        if let foregroundObserver = foregroundObserver {
+            Foundation.NotificationCenter.default.removeObserver(foregroundObserver)
+        }
     }
 
     // MARK: - Render triggers
@@ -138,30 +181,97 @@ final class BaseContactImageManager: NSObject, ContactImageManager, Injectable {
     /// Subscribes the render pipeline to every data signal that should refresh
     /// the contact images.
     ///
-    /// A single loop cycle emits all of these within a second or two: new glucose
-    /// kicks the loop, which then publishes a loop date (the same signal the app's
-    /// loop pill uses — it also fires in open loop, where the determination's
-    /// `timestamp` is never stamped), a new determination and an IOB update. They
-    /// are merged and debounced into one render per burst instead of four racing
-    /// ones, so the render also sees the fully settled state (glucose + loop date
-    /// + COB + IOB) rather than whichever slice happened to arrive first.
+    /// A single loop cycle emits all of these: new glucose kicks the loop, which then
+    /// publishes a loop date (the same signal the app's loop pill uses — it also fires
+    /// in open loop, where the determination's `timestamp` is never stamped), a new
+    /// determination and an IOB update. They are merged so the render sees the fully
+    /// settled state rather than whichever slice arrived first.
+    ///
+    /// **Sized from Gary's device logs (2026-08-24), not from a guess.** This was a
+    /// `debounce(for: .seconds(1))` on the belief that a cycle's events land "within a
+    /// second or two". They do not: measured across 319 cycles, a cycle's events span a
+    /// median of **12s** (p75 15s, p90 28s), so the debounce released about four times
+    /// per cycle. The result was 1,210 renders in a day against 287 loop cycles — 4.2
+    /// per cycle, with 74% of them redundant repeats inside the same cycle. Each one is
+    /// two Core Data fetches, a file read, and then per contact entry a 1024x1024
+    /// main-actor bitmap render, a PNG encode and a `CNSaveRequest`. That is the most
+    /// expensive recurring thing this app does, and three quarters of it was waste.
+    ///
+    /// `throttle`, not a longer `debounce`, for the reason the Live Activity pipeline
+    /// gives: debounce waits for silence and a steady trickle can starve it
+    /// indefinitely. Throttle guarantees an emission per window, and Combine's throttle
+    /// passes the *first* element straight through — so the photo still updates the
+    /// moment a reading lands, and only the follow-on chatter is suppressed.
+    ///
+    /// 15s because it covers 81% of observed bursts end to end (6s — the Live Activity's
+    /// value — covers only 21%, and 30s buys just 10 points more for double the lag).
+    ///
+    /// **CONTACT-CYCLE (2026-09-30): replaced by one render per cycle, after the loop.**
+    /// The throttle's leading edge fired on the reading, *before* the loop had run, so
+    /// that pass always drew the previous cycle's IOB, COB and eventual BG. The trailing
+    /// edge 15s later then drew the real values. 24-28 Sep: 2.1 passes per cycle, 79% of
+    /// cycles exactly 2, and with two contacts ~1,150 `CNSaveRequest`s a day, half of them
+    /// writing numbers that were already out of date.
+    ///
+    /// Now every event only *arms* a render. The loop landing arms it `loopSettleDelay`
+    /// out; anything else arms it `loopFallbackDelay` out. The deadline can only move
+    /// earlier, never later. So a reading at t, a loop at t+10 gives one render at t+15,
+    /// and if the loop never comes, the reading still renders at t+30. Nobody needs a
+    /// contact photo inside 15s; the Live Activity is where immediacy lives.
     private func registerRenderTriggers() {
         let determinationUpdates: AnyPublisher<Void, Never> = coreDataPublisher?
             .filteredByEntityName("OrefDetermination")
             .map { _ in () }
             .eraseToAnyPublisher() ?? Empty().eraseToAnyPublisher()
 
-        Publishers.MergeMany(
-            glucoseStorage.updatePublisher.eraseToAnyPublisher(),
-            iobService.iobPublisher.map { _ in () }.eraseToAnyPublisher(),
-            apsManager.lastLoopDateSubject.map { _ in () }.eraseToAnyPublisher(),
-            determinationUpdates
-        )
-        .debounce(for: .seconds(1), scheduler: queue)
-        .sink { [weak self] in
-            self?.enqueueRender(.full)
+        let triggers: [(source: String, delay: TimeInterval, publisher: AnyPublisher<Void, Never>)] = [
+            ("loop", Self.loopSettleDelay, apsManager.lastLoopDateSubject.map { _ in () }.eraseToAnyPublisher()),
+            ("glucose", Self.loopFallbackDelay, glucoseStorage.updatePublisher.eraseToAnyPublisher()),
+            ("iob", Self.loopFallbackDelay, iobService.iobPublisher.map { _ in () }.eraseToAnyPublisher()),
+            ("determination", Self.loopFallbackDelay, determinationUpdates)
+        ]
+
+        for trigger in triggers {
+            trigger.publisher
+                .sink { [weak self] in
+                    Task { @MainActor in
+                        self?.armRender(in: trigger.delay, source: trigger.source)
+                    }
+                }
+                .store(in: &subscriptions)
         }
-        .store(in: &subscriptions)
+    }
+
+    /// CONTACT-CYCLE: arms one render `delay` from now, unless one is already due
+    /// sooner. See `registerRenderTriggers()`.
+    @MainActor private func armRender(in delay: TimeInterval, source _: String) {
+        let deadline = Date().addingTimeInterval(delay)
+        if let armed = armedRenderDeadline, armed <= deadline {
+            return
+        }
+
+        armedRenderTask?.cancel()
+        armedRenderDeadline = deadline
+        if armedRenderBackgroundTask == .invalid {
+            armedRenderBackgroundTask = startBackgroundTask(withName: "Contact Image Cycle Wait")
+        }
+
+        armedRenderTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            // Replaced by a sooner arm: that one now owns the background task.
+            guard !Task.isCancelled, let self else { return }
+            self.armedRenderDeadline = nil
+            self.armedRenderTask = nil
+            self.enqueueRenderOnMain(.full)
+
+            // Hold the wait's assertion until the render is done — it takes its own,
+            // but only once it starts. If another render was armed meanwhile, that
+            // one inherits the assertion and ends it.
+            await self.renderTask?.value
+            if self.armedRenderDeadline == nil {
+                endBackgroundTaskSafely(&self.armedRenderBackgroundTask, taskName: "Contact Image Cycle Wait")
+            }
+        }
     }
 
     // MARK: - Foreground refresh
@@ -175,13 +285,15 @@ final class BaseContactImageManager: NSObject, ContactImageManager, Injectable {
     /// guarantees the image reflects current data every time the user returns to Trio,
     /// mirroring the Live Activity's foreground refresh.
     private func registerForegroundRefresh() {
-        Foundation.NotificationCenter.default.addObserver(
+        foregroundObserver = Foundation.NotificationCenter.default.addObserver(
             forName: UIApplication.didBecomeActiveNotification,
             object: nil,
             queue: nil
         ) { [weak self] _ in
-            // Unconditional full render so returning to the app always repairs
-            // whatever the contact store currently holds.
+            // Unconditional render so returning to the app always repairs whatever
+            // the contact store currently holds. The identical-bytes skip compares
+            // against the store itself, so a photo changed outside Trio still differs
+            // and is rewritten; only a contact already holding this image is skipped.
             self?.enqueueRender(.full)
         }
     }
@@ -227,24 +339,29 @@ final class BaseContactImageManager: NSObject, ContactImageManager, Injectable {
     /// the staleness timer skip the repair until the next data event.
     private func enqueueRender(_ request: RenderRequest) {
         Task { @MainActor [weak self] in
-            guard let self = self else { return }
+            self?.enqueueRenderOnMain(request)
+        }
+    }
 
-            // Coalesce into an already-queued render: it will snapshot the latest
-            // state when it starts anyway. Just make sure a data-driven request
-            // isn't downgraded to a staleness-only write gate.
-            if self.queuedRenderRequest != nil {
-                if request == .full {
-                    self.queuedRenderRequest = .full
-                }
-                return
+    /// The body of `enqueueRender`, callable synchronously from the main actor so a
+    /// caller can await the resulting `renderTask` (CONTACT-CYCLE's armed render does).
+    @MainActor private func enqueueRenderOnMain(_ request: RenderRequest) {
+        // Coalesce into an already-queued render: it will snapshot the latest
+        // state when it starts anyway. Just make sure the queued request isn't
+        // downgraded — a data-driven request isn't reduced to the staleness-only
+        // gate.
+        if let queued = queuedRenderRequest {
+            if request > queued {
+                queuedRenderRequest = request
             }
+            return
+        }
 
-            self.queuedRenderRequest = request
-            let previousRender = self.renderTask
-            self.renderTask = Task {
-                await previousRender?.value
-                await self.runQueuedRender()
-            }
+        queuedRenderRequest = request
+        let previousRender = renderTask
+        renderTask = Task {
+            await previousRender?.value
+            await self.runQueuedRender()
         }
     }
 
@@ -270,7 +387,9 @@ final class BaseContactImageManager: NSObject, ContactImageManager, Injectable {
             let unchanged = await MainActor.run {
                 RenderStaleness.current(for: state) == lastRenderedStaleness
             }
-            if unchanged { return }
+            if unchanged {
+                return
+            }
         }
 
         await updateContactImages()
@@ -416,6 +535,23 @@ final class BaseContactImageManager: NSObject, ContactImageManager, Injectable {
             let loopDate = apsManager.lastLoopDate
             state.lastLoopDate = loopDate == .distantPast ? nil : loopDate
 
+            // The other two inputs `LoopFreshness` needs in order to agree with the
+            // Home loop pill.
+            //
+            // Note these are read here and nowhere else, so the staleness timer's
+            // pre-check cannot see either of them change — it compares against this
+            // cached `state`. Closed loop is therefore given its own render trigger
+            // via `settingsDidChange`, matching the pill, which refreshes from the
+            // same broadcast. A manual temp basal has no dedicated trigger: it is
+            // only reachable in closed loop (the Home affordance is gated on
+            // `!closedLoop`, and `LoopFreshness` returns `.openLoop` first either
+            // way), so it is rare enough to leave to the next data-driven render.
+            // `closedLoop` here means "the loop is driving delivery". Since dosing modes (#1511)
+            // that is any mode that enacts, the same rule upstream's `NotLoopingMonitor` uses,
+            // so Low Glucose Suspend and Basal Testing count; only Open does not.
+            state.closedLoop = settingsManager.settings.dosingMode.automation != .off
+            state.manualTempBasal = apsManager.isManualTempBasal
+
             let iobValue = iobService.currentIOB ?? 0.0
             state.iob = iobValue
             state.iobText = Formatter.decimalFormatterWithOneFractionDigit.string(from: iobValue as NSNumber)
@@ -533,17 +669,66 @@ final class BaseContactImageManager: NSObject, ContactImageManager, Injectable {
         // foreground this is effectively a no-op.
         let backgroundTaskID = await MainActor.run { startBackgroundTask(withName: "Update Contact Images") }
 
+        await renderAndWriteContactImages()
+
+        // Release the background task assertion now the render + writes are done.
+        await MainActor.run {
+            var id = backgroundTaskID
+            endBackgroundTaskSafely(&id, taskName: "Update Contact Images")
+        }
+    }
+
+    /// Whether `CNContactStore` writes can currently succeed.
+    ///
+    /// `.denied`, `.restricted` and `.notDetermined` all fail *permanently* until
+    /// the user changes the setting in Settings, so re-rendering into them on every
+    /// tick burns work that cannot possibly land — see the gate in
+    /// `renderAndWriteContactImages()`.
+    private var hasContactsWriteAccess: Bool {
+        let status = CNContactStore.authorizationStatus(for: .contacts)
+        if status == .authorized { return true }
+        // Limited access (iOS 18+) still permits writing the contacts the user picked.
+        if #available(iOS 18.0, *), status == .limited { return true }
+        return false
+    }
+
+    /// The render itself. Split out of `updateContactImages()` so the background
+    /// task assertion has a single acquire/release pair around every exit path.
+    private func renderAndWriteContactImages() async {
         // Snapshot the render inputs on the main actor: a consistent copy of
-        // `state` plus the staleness we are about to render. Committing the gate
-        // only after a successful write (below) means a failed or no-op pass
-        // leaves the periodic timer free to retry next tick.
+        // `state` plus the staleness we are about to render.
         let (stateSnapshot, renderedStaleness) = await MainActor.run {
             (state, RenderStaleness.current(for: state))
         }
+
+        let contactEntries = await contactImageStorage.fetchContactImageEntries()
+
+        // Nothing this pass could possibly write: the user has no contact images
+        // configured, or Contacts access is not granted. Close the staleness gate
+        // regardless.
+        //
+        // Leaving it open was a slow leak of work. `lastRenderedStaleness` would
+        // stay `nil` forever, so the timer's pre-check (`current != nil`) reported a
+        // change on *every* tick, and each tick ran a full `updateContactImageState()`
+        // — two Core Data fetches, two main-actor materialisations and a file read of
+        // `bgTargets` — plus this entry fetch, on every tick, indefinitely, for a user
+        // who never set up a contact image at all.
+        //
+        // Closing it costs nothing, because neither case relies on the staleness
+        // timer to recover: adding or editing a contact image writes its picture
+        // immediately via `setImageForContact`, and every data-driven render is
+        // `.full`, which bypasses this gate entirely.
+        guard !contactEntries.isEmpty, hasContactsWriteAccess else {
+            await MainActor.run { lastRenderedStaleness = renderedStaleness }
+            return
+        }
+
+        // True once any contact holds this render — written now, or skipped because it
+        // already held these exact bytes (CONTACT-CYCLE).
         var didUpdateAnyContact = false
 
         // Iterate through all stored ContactImageEntry objects
-        for contactEntry in await contactImageStorage.fetchContactImageEntries() {
+        for contactEntry in contactEntries {
             // Ensure the contact has a valid contact ID
             guard let contactId = contactEntry.contactId else { continue }
 
@@ -552,6 +737,7 @@ final class BaseContactImageManager: NSObject, ContactImageManager, Injectable {
             // hops to the main thread for the render only; the CNContactStore I/O
             // below stays off it.
             let newImage = await ContactPicture.getImage(contact: contactEntry, state: stateSnapshot)
+            let pngData = newImage.pngData()
 
             do {
                 // Fetch the existing contact from CNContactStore using its identifier
@@ -572,9 +758,22 @@ final class BaseContactImageManager: NSObject, ContactImageManager, Injectable {
                     continue
                 }
 
+                // CONTACT-CYCLE: the contact already holds exactly these bytes, so the save
+                // would change nothing but still wake contactsd, iCloud and the Watch.
+                //
+                // Compared against the store itself, not a record of what we last wrote.
+                // Contacts hands back the exact bytes it was given — 527 of 527 on device,
+                // 2026-09-30 — so this survives a relaunch, and a photo changed or cleared
+                // outside Trio differs here and is rewritten, so returning to the app
+                // still repairs it without a forced write.
+                if let pngData, contact.imageData == pngData {
+                    didUpdateAnyContact = true
+                    continue
+                }
+
                 // Create a mutable copy of the contact to update its image
                 let mutableContact = contact.mutableCopy() as! CNMutableContact
-                mutableContact.imageData = newImage.pngData() // Set the new image data
+                mutableContact.imageData = pngData // Set the new image data
 
                 // Prepare a save request to update the contact
                 let saveRequest = CNSaveRequest()
@@ -590,18 +789,12 @@ final class BaseContactImageManager: NSObject, ContactImageManager, Injectable {
             }
         }
 
-        // Commit the gate only on a successful render, so a transient
-        // CNContactStore failure or an empty-entries pass doesn't wedge the
-        // periodic staleness timer into skipping needed refreshes. Written on
-        // the main actor to stay serialized with the timer's read.
+        // Commit the gate only after a write actually landed, so a transient
+        // CNContactStore failure leaves the periodic staleness timer free to retry
+        // on the next tick. (A pass with nothing to write returns early above.)
+        // Written on the main actor to stay serialized with the timer's read.
         if didUpdateAnyContact {
             await MainActor.run { lastRenderedStaleness = renderedStaleness }
-        }
-
-        // Release the background task assertion now the render + writes are done.
-        await MainActor.run {
-            var id = backgroundTaskID
-            endBackgroundTaskSafely(&id, taskName: "Update Contact Images")
         }
     }
 
@@ -736,5 +929,24 @@ final class BaseContactImageManager: NSObject, ContactImageManager, Injectable {
             debugPrint("\(DebuggingIdentifiers.failed) Error updating contact: \(error)")
             return false
         }
+    }
+}
+
+// MARK: - Settings
+
+extension BaseContactImageManager: SettingsObserver {
+    /// Re-render on any settings change.
+    ///
+    /// Closed loop is the one that matters for mirroring the Home loop pill: the pill
+    /// repaints from this same broadcast, so without this the ring would keep showing
+    /// green/amber/red for a loop that is no longer driving until the next data event
+    /// happened to arrive — up to a full loop cycle later.
+    ///
+    /// It is deliberately not narrowed to `closedLoop`. Units, the glucose colour
+    /// scheme and the high/low thresholds are all baked into the rendered image too,
+    /// and none of them had a trigger before either.
+    func settingsDidChange(_ settings: TrioSettings) {
+        units = settings.units
+        enqueueRender(.full)
     }
 }

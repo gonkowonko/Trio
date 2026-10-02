@@ -2,41 +2,6 @@ import Foundation
 import SwiftUI
 
 struct ContactPicture: View {
-    private enum Config {
-        static let lag: TimeInterval = 30
-        /// CGM readings older than this are rendered muted (dimmed). Set one CGM
-        /// cycle (~1 min) past the ring's 5-min warning so normal reading jitter
-        /// doesn't flip it every cycle.
-        static let glucoseStaleInterval: TimeInterval = 6 * 60
-        /// Readings older than this are considered urgently stale. The dim is the
-        /// same as the warning band; the split is kept only so the render cache
-        /// (`ContactImageManager`) still refreshes across it. Set at two missed
-        /// readings (~15 min) rather than one, so a single background BLE hiccup
-        /// that backfills a minute later doesn't trip it.
-        static let glucoseUrgentStaleInterval: TimeInterval = 15 * 60
-    }
-
-    /// How stale the current CGM reading is. Both stale bands dim the reading
-    /// identically now; the distinction only drives the render cache's refresh.
-    enum GlucoseStaleness {
-        case fresh // <= 6 min -> full colour
-        case warning // 6–15 min -> dimmed
-        case urgent // > 15 min (or missing) -> dimmed
-
-        static func classify(glucoseDate: Date?, now: Date = Date()) -> GlucoseStaleness {
-            guard let glucoseDate = glucoseDate else { return .urgent }
-            // Subtract the same lag the loop ring uses so the bands flip in lockstep.
-            let age = now.timeIntervalSince(glucoseDate) - Config.lag
-            if age >= Config.glucoseUrgentStaleInterval {
-                return .urgent
-            } else if age >= Config.glucoseStaleInterval {
-                return .warning
-            } else {
-                return .fresh
-            }
-        }
-    }
-
     @Binding var contact: ContactImageEntry
     @Binding var state: ContactImageState
 
@@ -59,6 +24,16 @@ struct ContactPicture: View {
 
         let format = UIGraphicsImageRendererFormat()
         format.opaque = false
+        // Pin the scale. `UIGraphicsImageRendererFormat()` defaults to the *device*
+        // scale, so on a 3x iPhone this drew 1024pt as 3072x3072 px — nine times the
+        // pixels, ~36 MB of backing store per render, and a correspondingly larger PNG
+        // written to an iCloud-synced contact ~560 times a day.
+        //
+        // Not intentional: the code this replaced upstream used
+        // `UIGraphicsBeginImageContext(rect.size)`, which is always scale 1.0. The
+        // rewrite to `UIGraphicsImageRenderer` silently changed the output resolution
+        // because it never set this.
+        format.scale = 1
         let renderer = UIGraphicsImageRenderer(size: rect.size, format: format)
         let image = renderer.image { ctx in
             switch contact.backgroundMode {
@@ -269,7 +244,42 @@ struct ContactPicture: View {
                 )
             }
         }
-        return image
+        return Self.downscaled(image)
+    }
+
+    /// Edge length actually stored on the contact.
+    ///
+    /// The drawing stays at 1024 and is resampled at the end, rather than rendering
+    /// natively at this size. The layout is not resolution-independent: font sizes are
+    /// absolute points tuned for a 1024 canvas (`regular = 300`), `drawText`'s shrink
+    /// loop hard-stops at 50pt, and the loop ring in `displayPiece` uses a literal
+    /// `strokeWidth: 10.0`. Rendering straight into a small canvas would distort all
+    /// three. Resampling costs a little CPU and guarantees the image looks the same.
+    ///
+    /// 256 because the consumers are small. A graphic-circular complication is 84-100 px
+    /// at watchOS's @2x, and the *entire screen* of the largest Apple Watch is 416 px
+    /// wide (Series 10 46mm) or 410 px (Ultra 2) — so a contact photo can never be drawn
+    /// larger than that, and on a card it is an avatar with margins, nearer 200-300 px.
+    ///
+    /// The point is not CPU — that was measured at a rounding error. It is bytes: the
+    /// image is written on every render, ~560 times a day, and these contacts live in
+    /// iCloud, so each write syncs to the account and out to the Watch. At 1024 that is
+    /// roughly 45 MB/day of contact traffic; at 256, about 9 MB.
+    private static let outputSize: CGFloat = 256
+
+    /// Resamples to `outputSize`. Returns the original untouched if it is already at or
+    /// below that, so raising `outputSize` above the draw size can never upscale.
+    private static func downscaled(_ image: UIImage) -> UIImage {
+        guard image.size.width > outputSize else { return image }
+        let side = CGSize(width: outputSize, height: outputSize)
+        let format = UIGraphicsImageRendererFormat()
+        format.opaque = false
+        // Fix the scale at 1: without this the renderer uses the device scale and would
+        // produce a 256pt @3x image — 768 px, three times the intended payload.
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: side, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: side))
+        }
     }
 
     private static func displayPiece(
@@ -323,27 +333,48 @@ struct ContactPicture: View {
             color
         }
 
-        // Dim the glucose-derived pieces (value, trend, delta) once the CGM
-        // reading goes stale. The last value is still shown, just muted — mirrors
-        // the Live Activity's stale treatment. Both stale bands (warning/urgent)
-        // use the same dim; the reading is no longer struck through.
+        // Fade the glucose-derived pieces (value, trend, delta) as the reading ages,
+        // in two steps — a cycle late, then past the point the algorithm will dose on
+        // it — and stop drawing a number at all once it is old enough that "what it
+        // was" stops being informative. Non-glucose pieces (IOB, COB, loop time) are
+        // unaffected: they have their own lifetimes.
         let isGlucoseDerived = value == .glucose || value == .trend || value == .delta
-        let staleness = GlucoseStaleness.classify(glucoseDate: state.glucoseDate)
+        let freshness = GlucoseFreshness.classify(glucoseDate: state.glucoseDate)
 
-        if let text = text {
+        // `state.glucose` and friends are only reassigned when a reading is actually
+        // fetched, so a stalled CGM leaves the last values sitting in `state`
+        // indefinitely. Age is judged from `glucoseDate`, never from whether a value
+        // happens to still be there.
+        //
+        // Expired follows the bobble exactly (`CurrentGlucoseView.bobbleContent`): the
+        // reading itself becomes dashes, while the trend and delta are *dropped* rather
+        // than replaced. Three pairs of dashes across the image would be noisier and
+        // say nothing the one pair doesn't.
+        let displayText: String? = if isGlucoseDerived, !freshness.showsValue {
+            value == .glucose ? "– –" : nil
+        } else {
+            text
+        }
+
+        if let displayText = displayText {
             let baseColor: Color = contact.colorMode == .color ? textColor : .white
-            let isStale = isGlucoseDerived && staleness != .fresh
-            // Dim the actual rendered color rather than swapping in an asset gray:
-            // dynamic/asset colors resolve to their light-mode variant in this
-            // trait-less bitmap context, so a nominal "gray" can come out near-white.
+            // Expired dashes must not inherit the glucose colour. `textColor` for
+            // `.glucose` is the dynamic in-range/high/low colour derived from the last
+            // reading, so dashes would render red after a high — reading as "high" when
+            // the point is "no data". `.loopGray` rather than `.secondary`, because
+            // dynamic colours resolve to their light-mode variant in this trait-less
+            // bitmap context and a nominal grey comes out near-white.
+            let resolvedColor: Color = isGlucoseDerived && !freshness.showsValue ? .loopGray : baseColor
+            // Dim the actual rendered colour for the same reason.
+            let opacity = isGlucoseDerived ? freshness.opacity : 1
             drawText(
-                text: text,
+                text: displayText,
                 rect: rect,
                 fitHeigh: fitHeigh,
                 fontSize: fontSize,
                 fontWeight: fontWeight,
                 fontWidth: fontWidth,
-                color: isStale ? baseColor.opacity(0.4) : baseColor
+                color: opacity < 1 ? resolvedColor.opacity(opacity) : resolvedColor
             )
         }
     }
@@ -417,12 +448,11 @@ struct ContactPicture: View {
 
         func makeAttributes(_ size: Int) -> [NSAttributedString.Key: Any] {
             let font = UIFont.systemFont(ofSize: CGFloat(size), weight: fontWeight.uiFontWeight)
-            let attributes: [NSAttributedString.Key: Any] = [
+            return [
                 .font: font,
                 .foregroundColor: UIColor(color),
                 .kern: fontWidth.value * Double(fontSize) // `kern` is the correct key for tracking
             ]
-            return attributes
         }
 
         var attributes: [NSAttributedString.Key: Any] = makeAttributes(theFontSize)
@@ -678,18 +708,14 @@ struct ContactPicture: View {
         contact _: ContactImageEntry,
         state: ContactImageState
     ) -> Color {
-        guard let lastLoopDate = state.lastLoopDate else {
-            return .loopGray
-        }
-        let delta = Date().timeIntervalSince(lastLoopDate) - Config.lag
-
-        if delta <= 5.minutes.timeInterval {
-            return .loopGreen
-        } else if delta <= 10.minutes.timeInterval {
-            return .loopYellow
-        } else {
-            return .loopRed
-        }
+        // Same classifier, same inputs as the Home loop pill, so the ring and the
+        // pill are never two different opinions about the same loop.
+        LoopFreshness.classify(
+            lastLoopDate: state.lastLoopDate,
+            now: Date(),
+            closedLoop: state.closedLoop,
+            manualTempBasal: state.manualTempBasal
+        ).bitmapColor
     }
 
     var uiImage: UIImage {
