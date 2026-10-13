@@ -5480,7 +5480,6 @@
 				7A11AC0DE00000000000010E /* HomeRootView+MealPanel.swift in Sources */,
 				7A11AC0DE00000000000010D /* HomeRootView+Header.swift in Sources */,
 				BD11C002000000000000C007 /* HomeRootView+HeaderPills.swift in Sources */,
-				584C79A91D034426A1DE60CB /* SlideToConfirmView.swift in Sources */,
 				38E98A2925F52C9300C0CED0 /* Error+Extensions.swift in Sources */,
 				3E62C7822F54CC1B00433237 /* BolusDisplayThreshold.swift in Sources */,
 				38EA05DA261F6E7C0064E39B /* SimpleLogReporter.swift in Sources */,
