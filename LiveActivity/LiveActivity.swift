@@ -130,7 +130,18 @@ private extension LiveActivityAttributes.ContentState {
             minForecast: [],
             maxForecast: [],
             forecastLines: [],
-            forecastDisplayType: "cone"
+            forecastDisplayType: "cone",
+            cgmLifecycle: .init(phase: .ok, endsAt: Date().addingTimeInterval(4 * 24 * 3600)),
+            pumpLifecycle: .init(phase: .warning, endsAt: Date().addingTimeInterval(9 * 3600)),
+            loopStatus: .init(
+                lastLoopDate: Date().addingTimeInterval(-120),
+                isClosedLoop: true,
+                isManualTempBasal: false,
+                severity: .ok
+            ),
+            cgmStatus: nil,
+            pumpStatus: nil,
+            basal: .init(rate: 0.85, kind: .temp, isSuspended: false)
         )
 
     // 0 is the widest digit. Use this to get an upper bound on text width.
@@ -147,8 +158,8 @@ private extension LiveActivityAttributes.ContentState {
             lowGlucose: 70,
             target: 100,
             glucoseColorScheme: "staticColor",
-            useDetailedViewIOS: false,
-            useDetailedViewWatchOS: false,
+            lockScreenStyleIOS: .simple,
+            lockScreenStyleWatchOS: .simple,
             detailedViewState: detailedViewState,
             isInitialState: false
         )
@@ -165,8 +176,8 @@ private extension LiveActivityAttributes.ContentState {
             lowGlucose: 70,
             target: 100,
             glucoseColorScheme: "staticColor",
-            useDetailedViewIOS: false,
-            useDetailedViewWatchOS: false,
+            lockScreenStyleIOS: .simple,
+            lockScreenStyleWatchOS: .simple,
             detailedViewState: detailedViewState,
             isInitialState: false
         )
@@ -183,8 +194,8 @@ private extension LiveActivityAttributes.ContentState {
             lowGlucose: 70,
             target: 100,
             glucoseColorScheme: "staticColor",
-            useDetailedViewIOS: false,
-            useDetailedViewWatchOS: false,
+            lockScreenStyleIOS: .simple,
+            lockScreenStyleWatchOS: .simple,
             detailedViewState: detailedViewState,
             isInitialState: false
         )
@@ -202,8 +213,8 @@ private extension LiveActivityAttributes.ContentState {
             lowGlucose: 70,
             target: 100,
             glucoseColorScheme: "staticColor",
-            useDetailedViewIOS: false,
-            useDetailedViewWatchOS: false,
+            lockScreenStyleIOS: .simple,
+            lockScreenStyleWatchOS: .simple,
             detailedViewState: detailedViewState,
             isInitialState: false
         )
@@ -220,8 +231,8 @@ private extension LiveActivityAttributes.ContentState {
             lowGlucose: 70,
             target: 100,
             glucoseColorScheme: "staticColor",
-            useDetailedViewIOS: false,
-            useDetailedViewWatchOS: false,
+            lockScreenStyleIOS: .simple,
+            lockScreenStyleWatchOS: .simple,
             detailedViewState: detailedViewState,
             isInitialState: false
         )
@@ -238,8 +249,8 @@ private extension LiveActivityAttributes.ContentState {
             lowGlucose: 70,
             target: 100,
             glucoseColorScheme: "staticColor",
-            useDetailedViewIOS: false,
-            useDetailedViewWatchOS: false,
+            lockScreenStyleIOS: .simple,
+            lockScreenStyleWatchOS: .simple,
             detailedViewState: detailedViewState,
             isInitialState: false
         )
@@ -257,8 +268,8 @@ private extension LiveActivityAttributes.ContentState {
             lowGlucose: 70,
             target: 100,
             glucoseColorScheme: "staticColor",
-            useDetailedViewIOS: true,
-            useDetailedViewWatchOS: true,
+            lockScreenStyleIOS: .detailed,
+            lockScreenStyleWatchOS: .detailed,
             detailedViewState: detailedViewState,
             isInitialState: false
         )
@@ -277,8 +288,8 @@ private extension LiveActivityAttributes.ContentState {
             lowGlucose: 70,
             target: 100,
             glucoseColorScheme: "staticColor",
-            useDetailedViewIOS: true,
-            useDetailedViewWatchOS: true,
+            lockScreenStyleIOS: .detailed,
+            lockScreenStyleWatchOS: .detailed,
             detailedViewState: detailedViewState,
             isInitialState: false
         )
@@ -297,8 +308,8 @@ private extension LiveActivityAttributes.ContentState {
             lowGlucose: 70,
             target: 100,
             glucoseColorScheme: "staticColor",
-            useDetailedViewIOS: true,
-            useDetailedViewWatchOS: true,
+            lockScreenStyleIOS: .detailed,
+            lockScreenStyleWatchOS: .detailed,
             detailedViewState: detailedViewState,
             isInitialState: false
         )
@@ -318,8 +329,8 @@ private extension LiveActivityAttributes.ContentState {
             lowGlucose: 70,
             target: 100,
             glucoseColorScheme: "staticColor",
-            useDetailedViewIOS: true,
-            useDetailedViewWatchOS: true,
+            lockScreenStyleIOS: .detailed,
+            lockScreenStyleWatchOS: .detailed,
             detailedViewState: detailedViewState,
             isInitialState: false
         )
@@ -338,8 +349,8 @@ private extension LiveActivityAttributes.ContentState {
             lowGlucose: 70,
             target: 100,
             glucoseColorScheme: "staticColor",
-            useDetailedViewIOS: true,
-            useDetailedViewWatchOS: true,
+            lockScreenStyleIOS: .detailed,
+            lockScreenStyleWatchOS: .detailed,
             detailedViewState: detailedViewState,
             isInitialState: false
         )
@@ -358,8 +369,8 @@ private extension LiveActivityAttributes.ContentState {
             lowGlucose: 70,
             target: 100,
             glucoseColorScheme: "staticColor",
-            useDetailedViewIOS: true,
-            useDetailedViewWatchOS: true,
+            lockScreenStyleIOS: .detailed,
+            lockScreenStyleWatchOS: .detailed,
             detailedViewState: detailedViewState,
             isInitialState: false
         )

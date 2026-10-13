@@ -896,47 +896,7 @@ extension Home {
             glucoseSource: GlucoseSource?,
             lifecycle: DeviceLifecycleProgress?
         ) -> Date? {
-            if let sim = glucoseSource as? GlucoseSimulatorSource {
-                return sim.simulatedSensorExpiresAt
-            }
-            guard let manager else { return nil }
-            // Once a G7 enters grace period, `sensorExpiresAt` is in the past
-            // and would collapse the bobble countdown to "<1m" while the arc
-            // (driven by lifecycle.percentComplete against `sensorEndsAt`) is
-            // still mid-progress. Fall back to `sensorEndsAt` so bobble and
-            // arc agree, and the user sees grace-period time remaining.
-            if let g7 = manager as? G7CGMManager {
-                let now = Date()
-                if let exp = g7.sensorExpiresAt, exp > now { return exp }
-                return g7.sensorEndsAt ?? g7.sensorExpiresAt
-            }
-            if let g6 = manager as? G6CGMManager, let exp = g6.latestReading?.sessionExpDate { return exp }
-            if let g5 = manager as? G5CGMManager, let exp = g5.latestReading?.sessionExpDate { return exp }
-
-            if let libreLoop = manager as? LibreLoopCGMManager {
-                if case let .active(remaining, _) = libreLoop.sensorLifecycle, remaining > 0 {
-                    return Date().addingTimeInterval(remaining)
-                }
-                // Warmup / initializing / expired — no meaningful expiry yet.
-                return nil
-            }
-
-            let activatedAt: Date?
-            if let g7 = manager as? G7CGMManager {
-                activatedAt = g7.sensorActivatedAt
-            } else if let libre = manager as? LibreTransmitterManagerV3 {
-                activatedAt = libre.sensorInfoObservable.activatedAt
-            } else {
-                activatedAt = nil
-            }
-
-            guard let activatedAt,
-                  let lifecycle,
-                  lifecycle.percentComplete > 0.001
-            else { return nil }
-            let elapsed = Date().timeIntervalSince(activatedAt)
-            guard elapsed > 0 else { return nil }
-            return activatedAt.addingTimeInterval(elapsed / lifecycle.percentComplete)
+            SensorExpiryResolver.expiresAt(manager: manager, glucoseSource: glucoseSource, lifecycle: lifecycle)
         }
 
         /// Wall-clock end of the sensor's warmup window; `nil` when not warming up.
@@ -968,17 +928,7 @@ extension Home {
         /// G7 only — it exposes activation, lifetime and grace end. Other CGMs
         /// return `nil` and keep the legacy last-48h `cgmProgress` arc.
         private static func resolveSensorTimeline(manager: CGMManagerUI?) -> SensorLifecycleTimeline? {
-            guard let g7 = manager as? G7CGMManager,
-                  let start = g7.sensorActivatedAt,
-                  let expiresAt = g7.sensorExpiresAt,
-                  let endsAt = g7.sensorEndsAt
-            else { return nil }
-            return SensorLifecycleTimeline(
-                start: start,
-                expiresAt: expiresAt,
-                endsAt: endsAt,
-                finalPhaseDuration: SensorLifecycleTimeline.defaultFinalPhaseDuration
-            )
+            SensorLifecycleTimeline.resolve(manager: manager)
         }
     }
 }

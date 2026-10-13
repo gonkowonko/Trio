@@ -1,4 +1,5 @@
 import Foundation
+import LoopKit
 
 extension UserDefaults {
     private enum Keys {
@@ -70,7 +71,13 @@ extension LiveActivityAttributes.ContentState {
         iob: Decimal?,
         override: OverrideData?,
         tempTarget: TempTargetData?,
-        widgetItems: [LiveActivityAttributes.LiveActivityItem]?
+        widgetItems: [LiveActivityAttributes.LiveActivityItem]?,
+        cgmLifecycle: LiveActivityAttributes.DeviceLifecycle?,
+        pumpLifecycle: LiveActivityAttributes.DeviceLifecycle?,
+        loopStatus: LiveActivityAttributes.LoopStatus?,
+        cgmStatus: LiveActivityAttributes.DeviceStatusMessage?,
+        pumpStatus: LiveActivityAttributes.DeviceStatusMessage?,
+        basal: LiveActivityAttributes.BasalStatus?
     ) {
         let glucose = bg.glucose
         let formattedBG = Self.formatGlucose(Int(glucose), units: units, forceSign: false)
@@ -110,12 +117,26 @@ extension LiveActivityAttributes.ContentState {
             tdd: determination?.tdd ?? 0 as Decimal,
             isOverrideActive: override?.isActive ?? false,
             overrideName: override?.overrideName ?? "Override",
-            overrideDate: override?.date ?? Date(),
-            overrideDuration: override?.duration ?? 0,
+            // LA-COALESCE: a fixed sentinel, not `Date()`. This field is only
+            // read when `isOverrideActive`, so its value is meaningless while no
+            // override is running — but `Date()` made it *different on every
+            // construction*, which meant two states describing an identical
+            // screen never compared equal. That silently defeated the dedupe in
+            // `pushUpdate`: it logged zero skips across a full day.
+            overrideDate: override?.date ?? Date(timeIntervalSince1970: 0),
+            // An indefinite override is normalised to a zero duration here
+            // rather than carried as its own field, because zero already means
+            // "no end to count down to" everywhere downstream, and the pushed
+            // state has a size budget worth not spending on a second flag.
+            // CoreData keeps `indefinite` and `duration` independent, so an
+            // override switched to indefinite retains its old duration and would
+            // otherwise keep counting down to an end that no longer exists.
+            overrideDuration: (override?.indefinite ?? false) ? 0 : (override?.duration ?? 0),
             overrideTarget: override?.target ?? 0,
             isTempTargetActive: tempTarget?.isActive ?? false,
             tempTargetName: tempTarget?.tempTargetName ?? "Temp Target",
-            tempTargetDate: tempTarget?.date ?? Date(),
+            // LA-COALESCE: same reason as `overrideDate` above.
+            tempTargetDate: tempTarget?.date ?? Date(timeIntervalSince1970: 0),
             tempTargetDuration: tempTarget?.duration ?? 0,
             tempTargetTarget: tempTarget?.target ?? 0,
             widgetItems: widgetItems ?? [], // set empty array here to silence compiler; this can never be nil
@@ -127,7 +148,13 @@ extension LiveActivityAttributes.ContentState {
                 ? (determination?.forecastLines ?? [])
                 .map { LiveActivityAttributes.ForecastLine(type: $0.type, values: $0.values) }
                 : [],
-            forecastDisplayType: settings.forecastDisplayType.rawValue
+            forecastDisplayType: settings.forecastDisplayType.rawValue,
+            cgmLifecycle: cgmLifecycle,
+            pumpLifecycle: pumpLifecycle,
+            loopStatus: loopStatus,
+            cgmStatus: cgmStatus,
+            pumpStatus: pumpStatus,
+            basal: basal
         )
 
         self.init(
@@ -140,10 +167,99 @@ extension LiveActivityAttributes.ContentState {
             lowGlucose: settings.low,
             target: determination?.target ?? 100 as Decimal,
             glucoseColorScheme: settings.glucoseColorScheme.rawValue,
-            useDetailedViewIOS: settings.lockScreenView == .detailed,
-            useDetailedViewWatchOS: settings.smartStackView == .detailed,
+            lockScreenStyleIOS: LiveActivityAttributes.LockScreenStyle(
+                rawValue: settings.lockScreenView.rawValue
+            ) ?? .simple,
+            lockScreenStyleWatchOS: LiveActivityAttributes.LockScreenStyle(
+                rawValue: settings.smartStackView.rawValue
+            ) ?? .simple,
             detailedViewState: detailedState,
             isInitialState: false
         )
+    }
+}
+
+/// Turns raw device lifecycle anchors into the `DeviceLifecycle` the Live
+/// Activity's status pills render.
+///
+/// Thresholds are `DeviceLanesView`'s, so the pills and the home-screen lanes
+/// escalate at the same moments:
+/// - **CGM** — the final window is `SensorLifecycleTimeline.finalPhaseDuration`
+///   (24 h on G7), then a grace period running to `endsAt`.
+/// - **Pump** — orange inside the last 12 h, then an 8 h grace window past
+///   nominal expiry before hard shutdown.
+///
+/// The lane still computes its own phases from the same constants. Collapsing
+/// `DeviceLanesView.sensorPhase` / `podPhase` onto this type is the obvious
+/// follow-up, and would leave one definition of when a device is "in trouble".
+enum LiveActivityDeviceLifecycle {
+    /// Omnipod's grace window: the pod keeps delivering for 8 h past nominal
+    /// expiry before it shuts down hard.
+    static let podGraceWindow: TimeInterval = 8 * 60 * 60
+    /// Orange inside the last 12 h, matching `DeviceLanesView.podWarnWindow`.
+    static let podWarnWindow: TimeInterval = 12 * 60 * 60
+    /// Fallback final window for CGMs that expose an expiry date but no
+    /// lifespan anchors, so no `SensorLifecycleTimeline` can be built.
+    static let sensorFallbackWarnWindow: TimeInterval = 24 * 60 * 60
+
+    /// - Parameters:
+    ///   - timeline: Full lifespan anchors, when the manager exposes them (G7).
+    ///     Preferred, because it is the only source that knows the grace end.
+    ///   - expiresAt: Bare expiry date, used when there is no timeline. Without
+    ///     a known grace window a sensor goes straight from `warning` to
+    ///     `expired` at this date.
+    static func cgm(
+        timeline: SensorLifecycleTimeline?,
+        expiresAt: Date?,
+        now: Date = Date()
+    ) -> LiveActivityAttributes.DeviceLifecycle? {
+        if let timeline {
+            if now >= timeline.endsAt {
+                return .init(phase: .expired, endsAt: nil)
+            }
+            if now >= timeline.expiresAt {
+                return .init(phase: .grace, endsAt: timeline.endsAt)
+            }
+            guard let arc = timeline.arcState(now: now) else {
+                return .init(phase: .expired, endsAt: nil)
+            }
+            switch arc.state {
+            case .critical,
+                 .warning:
+                return .init(phase: .warning, endsAt: timeline.expiresAt)
+            default:
+                return .init(phase: .ok, endsAt: timeline.expiresAt)
+            }
+        }
+
+        guard let expiresAt else { return nil }
+        if now >= expiresAt { return .init(phase: .expired, endsAt: nil) }
+        if expiresAt.timeIntervalSince(now) <= sensorFallbackWarnWindow {
+            return .init(phase: .warning, endsAt: expiresAt)
+        }
+        return .init(phase: .ok, endsAt: expiresAt)
+    }
+
+    /// - Parameters:
+    ///   - expiresAt: Nominal end of the pod's life, *excluding* grace.
+    ///     `DeviceDataManager` already normalises Medtrum's `patchExpiresAt`
+    ///     (which bakes grace in) to `patchGracePeriodFrom` for this reason.
+    ///   - isPumpSetUp: Whether a pump is paired at all. A pump with no session
+    ///     clock (Medtronic, Dana) reports `ok` rather than disappearing.
+    static func pump(
+        expiresAt: Date?,
+        isPumpSetUp: Bool,
+        now: Date = Date()
+    ) -> LiveActivityAttributes.DeviceLifecycle? {
+        guard isPumpSetUp else { return nil }
+        guard let expiresAt else { return .init(phase: .ok, endsAt: nil) }
+
+        let shutdownAt = expiresAt.addingTimeInterval(podGraceWindow)
+        if now >= shutdownAt { return .init(phase: .expired, endsAt: nil) }
+        if now >= expiresAt { return .init(phase: .grace, endsAt: shutdownAt) }
+        if expiresAt.timeIntervalSince(now) <= podWarnWindow {
+            return .init(phase: .warning, endsAt: expiresAt)
+        }
+        return .init(phase: .ok, endsAt: expiresAt)
     }
 }

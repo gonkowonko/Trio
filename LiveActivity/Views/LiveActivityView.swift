@@ -32,7 +32,7 @@ struct LiveActivityView: View {
     }
 
     var body: some View {
-        if isWatchOS, context.state.useDetailedViewWatchOS {
+        if isWatchOS, context.state.lockScreenStyleWatchOS != .simple {
             VStack {
                 LiveActivityBGLabelWatchView(context: context, glucoseColor: glucoseColor)
                 LiveActivityChartView(context: context, additionalState: context.state.detailedViewState)
@@ -57,7 +57,11 @@ struct LiveActivityView: View {
             }
             .addLiveActivityModifiers(isWatchOS: true)
 
-        } else if context.state.useDetailedViewIOS {
+        } else if context.state.lockScreenStyleIOS == .custom {
+            LiveActivityCustomView(context: context)
+                .addCustomLiveActivityModifiers()
+
+        } else if context.state.lockScreenStyleIOS == .detailed {
             VStack {
                 LiveActivityChartView(context: context, additionalState: context.state.detailedViewState)
                     .frame(maxWidth: UIScreen.main.bounds.width * 0.9)
@@ -87,6 +91,12 @@ struct LiveActivityView: View {
                                     }
                             }
                         }
+                    }
+                    .overlay(alignment: .topTrailing) {
+                        LiveActivityDeviceStatusPills(
+                            cgm: context.state.detailedViewState.cgmLifecycle,
+                            pump: context.state.detailedViewState.pumpLifecycle
+                        )
                     }
 
                 HStack {
@@ -202,7 +212,9 @@ struct LiveActivityExpandedBottomView: View {
     var body: some View {
         if context.state.isInitialState {
             Text("Live Activity Expired. Open Trio to Refresh").minimumScaleFactor(0.01)
-        } else if context.state.useDetailedViewIOS {
+        } else if context.state.lockScreenStyleIOS != .simple {
+            // The Dynamic Island keeps the chart for both detailed and custom;
+            // the Custom layout is a lock-screen composition only.
             LiveActivityChartView(context: context, additionalState: context.state.detailedViewState)
                 .addIsWatchOS()
         }

@@ -99,6 +99,7 @@ extension LiveActivityManager {
                 tdd: tddValue,
                 target: determination.currentTarget?.decimalValue ?? 0,
                 date: determination.deliverAt,
+                rate: determination.rate?.decimalValue,
                 minForecast: minForecast,
                 maxForecast: maxForecast,
                 forecastLines: forecastLines
@@ -128,14 +129,15 @@ extension LiveActivityManager {
             ofType: OverrideStored.self,
             predicate: .predicateForOneDayAgo,
             key: "date",
-            propertiesToFetch: ["enabled", "name", "target", "date", "duration"]
+            propertiesToFetch: ["enabled", "name", "target", "date", "duration", "indefinite"]
         ) { row in
             OverrideData(
                 isActive: row["enabled"] as? Bool ?? false,
                 overrideName: row["name"] as? String ?? "Override",
                 date: row["date"] as? Date ?? Date(),
                 duration: row["duration"] as? Decimal ?? 0,
-                target: row["target"] as? Decimal ?? 0
+                target: row["target"] as? Decimal ?? 0,
+                indefinite: row["indefinite"] as? Bool ?? false
             )
         }
     }

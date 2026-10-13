@@ -4130,7 +4130,7 @@
       }
     },
     " U/hr" : {
-      "comment" : "Unit insulin per hour\nUnit per hour with space",
+      "comment" : "Unit insulin per hour",
       "localizations" : {
         "bg" : {
           "stringUnit" : {
@@ -58888,7 +58888,7 @@
       }
     },
     "Basal" : {
-      "comment" : "Treatment label in history for scheduled basal",
+      "comment" : "Basal tile caption, Custom Live Activity\nTreatment label in history for scheduled basal",
       "localizations" : {
         "bg" : {
           "stringUnit" : {
@@ -73527,6 +73527,7 @@
       }
     },
     "Carbs on board" : {
+      "extractionState" : "stale",
       "localizations" : {
         "bg" : {
           "stringUnit" : {
@@ -82728,6 +82729,7 @@
       }
     },
     "COB" : {
+      "comment" : "Carbs on board, Custom Live Activity tile",
       "localizations" : {
         "bg" : {
           "stringUnit" : {
@@ -132918,6 +132920,7 @@
     },
     "Eventual glucose" : {
       "comment" : "A label displayed under the loop status icon",
+      "extractionState" : "stale",
       "localizations" : {
         "bg" : {
           "stringUnit" : {
@@ -156015,6 +156018,9 @@
         }
       }
     },
+    "Grace" : {
+      "comment" : "Device lane label prefix during the post-expiry grace period"
+    },
     "Gradient Purple = As readings approach and exceed above target, they become more purple." : {
       "localizations" : {
         "bg" : {
@@ -169224,6 +169230,9 @@
         }
       }
     },
+    "in grace period" : {
+      "comment" : "Device pill accessibility state"
+    },
     "in progress" : {
       "comment" : "Accessibility: loop currently running",
       "localizations" : {
@@ -172120,6 +172129,7 @@
       }
     },
     "Insulin on board" : {
+      "extractionState" : "stale",
       "localizations" : {
         "bg" : {
           "stringUnit" : {
@@ -175447,6 +175457,7 @@
       }
     },
     "IOB" : {
+      "comment" : "Insulin on board, Custom Live Activity tile",
       "localizations" : {
         "bg" : {
           "stringUnit" : {
@@ -187132,6 +187143,9 @@
         }
       }
     },
+    "Loop not running" : {
+      "comment" : "Open loop or no loop data, Custom Live Activity"
+    },
     "loop overdue" : {
       "comment" : "Accessibility: loop status",
       "localizations" : {
@@ -187262,6 +187276,12 @@
           }
         }
       }
+    },
+    "Loop overdue" : {
+      "comment" : "Loop has not run in a long time, Custom Live Activity"
+    },
+    "Loop running late" : {
+      "comment" : "Loop is behind schedule, Custom Live Activity"
     },
     "Loop statistics will appear here once data is available." : {
       "localizations" : {
@@ -187661,6 +187681,9 @@
         }
       }
     },
+    "looped %@ ago" : {
+      "comment" : "Custom Live Activity loop status, healthy"
+    },
     "looping" : {
       "comment" : "Looping in progress",
       "localizations" : {
@@ -187793,7 +187816,7 @@
       }
     },
     "Looping" : {
-      "comment" : "Title for looping and system statistics",
+      "comment" : "Loop is running normally, Custom Live Activity\nTitle for looping and system statistics",
       "localizations" : {
         "bg" : {
           "stringUnit" : {
@@ -192544,9 +192567,6 @@
         }
       }
     },
-    "Manual basal %@" : {
-      "comment" : "Accessibility: manual temp basal rate the user set on the pump"
-    },
     "manual entry" : {
       "comment" : "Accessibility: manually entered glucose",
       "localizations" : {
@@ -192807,6 +192827,12 @@
           }
         }
       }
+    },
+    "manual temp basal" : {
+      "comment" : "Custom Live Activity loop status"
+    },
+    "Manual Temp Basal" : {
+      "comment" : "A manual temp basal is running, Custom Live Activity"
     },
     "Manual Temp Basal Active" : {
       "localizations" : {
@@ -212450,6 +212476,9 @@
         }
       }
     },
+    "no loop data" : {
+      "comment" : "Custom Live Activity loop status"
+    },
     "No Loop Data" : {
       "localizations" : {
         "bg" : {
@@ -216677,6 +216706,9 @@
           }
         }
       }
+    },
+    "not looped %@" : {
+      "comment" : "Custom Live Activity loop status, overdue"
     },
     "not looping" : {
       "comment" : "Accessibility: loop status",
@@ -222987,6 +223019,7 @@
       }
     },
     "OK" : {
+      "comment" : "Device pill accessibility state",
       "localizations" : {
         "bg" : {
           "stringUnit" : {
@@ -225075,6 +225108,9 @@
           }
         }
       }
+    },
+    "open loop" : {
+      "comment" : "Custom Live Activity loop status"
     },
     "Open Loop" : {
       "comment" : "Dosing mode",
@@ -228507,6 +228543,7 @@
       }
     },
     "Override" : {
+      "comment" : "Unnamed override, Custom Live Activity chip",
       "localizations" : {
         "bg" : {
           "stringUnit" : {
@@ -250370,6 +250407,9 @@
         }
       }
     },
+    "remaining" : {
+      "comment" : "Device pill accessibility state"
+    },
     "Remaining Carbs Cap" : {
       "comment" : "Remaining Carbs Cap",
       "localizations" : {
@@ -251804,6 +251844,9 @@
         }
       }
     },
+    "Replace" : {
+      "comment" : "Live Activity device pill label once the device is past hard shutdown"
+    },
     "Replace CGM Sensor" : {
       "comment" : "Title of an alert that instructs the user to replace a CGM sensor.",
       "localizations" : {
@@ -251935,6 +251978,9 @@
         }
       }
     },
+    "replace now" : {
+      "comment" : "Device pill accessibility state"
+    },
     "Replace pod" : {
       "comment" : "View/Header when pod expired",
       "localizations" : {
@@ -252065,6 +252111,9 @@
           }
         }
       }
+    },
+    "Replace sensor" : {
+      "comment" : "Device lane label when the CGM session is fully over"
     },
     "Represents carb equivalent for fat and protein, calculated using the Warsaw Method." : {
       "localizations" : {
@@ -262996,6 +263045,9 @@
           }
         }
       }
+    },
+    "Sensor" : {
+      "comment" : "Accessibility name for the CGM status pill"
     },
     "Sensor Age" : {
       "extractionState" : "manual",
@@ -277003,6 +277055,7 @@
     },
     "Snooze alerts" : {
       "comment" : "A label for a button that can be used to snooze alerts.",
+      "extractionState" : "stale",
       "localizations" : {
         "bg" : {
           "stringUnit" : {
@@ -279227,6 +279280,9 @@
           }
         }
       }
+    },
+    "Stabilizing" : {
+      "comment" : "CGM stabilizing status"
     },
     "STALE DATA" : {
       "comment" : "Information displayed when watch app data outdated or stale.",
@@ -287113,7 +287169,7 @@
       }
     },
     "Suspended" : {
-      "comment" : "Basal delivery suspended on the pump"
+      "comment" : "Pump has suspended insulin delivery"
     },
     "Suspending insulin delivery..." : {
       "comment" : "Text for suspend resume button when insulin delivery is suspending",
@@ -327256,7 +327312,7 @@
       }
     },
     "U/hr" : {
-      "comment" : "Insulin unit per hour abbreviation",
+      "comment" : "Insulin unit per hour abbreviation\nInsulin units per hour",
       "localizations" : {
         "bg" : {
           "stringUnit" : {
@@ -338073,6 +338129,9 @@
           }
         }
       }
+    },
+    "Warmup" : {
+      "comment" : "CGM warmup status (short, for the device lane)"
     },
     "Warning when bolusing with a very low or forecasted very low glucose." : {
       "localizations" : {

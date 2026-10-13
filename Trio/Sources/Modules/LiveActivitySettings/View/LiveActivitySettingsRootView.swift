@@ -187,7 +187,8 @@ extension LiveActivitySettings {
                                     selection: $state.smartStackView,
                                     label: Text("Watch/Carplay Widget Style")
                                 ) {
-                                    ForEach(LockScreenView.allCases) { selection in
+                                    // Custom is an iPhone lock-screen layout only.
+                                    ForEach(LockScreenView.smartStackCases) { selection in
                                         Text(selection.displayName).tag(selection)
                                     }
                                 }.padding(.top)
