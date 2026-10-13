@@ -90,8 +90,10 @@ struct LoopView: View {
     @ViewBuilder var body: some View {
         if showsCaption {
             loopStatus
-                .padding(.vertical, 5)
-                .padding(.horizontal, 10)
+                // LOCAL: the header pills' padding, so this capsule is the size of the IOB / COB /
+                // eventual pills beside it (upstream: 5 / 10). See `HeaderPill`.
+                .padding(.vertical, HeaderPill.verticalPadding)
+                .padding(.horizontal, HeaderPill.horizontalPadding)
                 .overlay(
                     Capsule()
                         .stroke(color.opacity(0.4), lineWidth: 2)
@@ -160,7 +162,8 @@ struct LoopView: View {
     private var ringLineWidth: CGFloat { max(2, ringDiameter * 0.08) }
 
     private var loopStatus: some View {
-        HStack(alignment: .center) {
+        // LOCAL: 5pt spacing inside the capsule, as the header pills use (upstream: default).
+        HStack(alignment: .center, spacing: showsCaption ? 5 : nil) {
             ZStack {
                 if dosingMode == .closed, !manualTempBasal {
                     Image(systemName: "circle")
@@ -179,19 +182,28 @@ struct LoopView: View {
                         .font(.system(size: ringDiameter * 0.6, weight: .bold))
                 }
             }
-            .frame(width: ringDiameter, height: ringDiameter)
+            // LOCAL: inside the capsule the ring takes the pills' 16pt icon slot (upstream: its diameter).
+            .frame(width: showsCaption ? HeaderPill.iconWidth : ringDiameter, height: ringDiameter)
             // A caption would imply an action that did not happen in open loop, LGS, or basal testing.
             // Show timestamp only in closed loop, when determination is enacted.
             if showsCaption {
-                if isLooping {
-                    Text("looping")
-                } else if manualTempBasal {
-                    Text("Manual")
-                } else if determination.first?.deliverAt != nil {
-                    Text(timeString)
-                } else {
-                    Text("--")
+                // LOCAL: the caption sits in the pills' fixed-width slot (`HeaderPill.widthTemplate`),
+                // so the capsule matches their width and doesn't change size with its text.
+                // "looping" is wider than the template and scales down rather than growing the pill.
+                ZStack(alignment: .center) {
+                    Text(HeaderPill.widthTemplate).hidden()
+                    if isLooping {
+                        Text("looping")
+                    } else if manualTempBasal {
+                        Text("Manual")
+                    } else if determination.first?.deliverAt != nil {
+                        Text(timeString)
+                    } else {
+                        Text("--")
+                    }
                 }
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
             }
         }
         .font(.callout).fontWeight(.bold).fontDesign(.rounded)

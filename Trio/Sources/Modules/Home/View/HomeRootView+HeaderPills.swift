@@ -23,6 +23,23 @@ enum HeaderPill {
     /// round; growing the readouts by the same 1pt lines their outside edges up with it,
     /// without touching `LoopView`.
     static let loopOutlineOverhang: CGFloat = 1
+    /// Ghost capsule drawn behind the loop ring *outside* closed loop.
+    ///
+    /// `LoopView` only draws its capsule when `showsCaption` — i.e. full
+    /// automation. In open loop, LGS and Basal Testing it collapses to a bare
+    /// 26pt ring, so the loop slot loses the footprint the three readout pills
+    /// keep and the column visibly shrinks around it. That is what makes the
+    /// alarms bell look disjointed in those modes: the bell is pinned to the
+    /// header frame, so it has nothing stable to line up against.
+    ///
+    /// The ghost reserves a pill-sized slot and fills it at the same faint
+    /// opacity the readout pills use, so the loop element holds one footprint in
+    /// every dosing mode. It is a fill only, never a stroke — a stroke would read
+    /// as a control and compete with the real closed-loop capsule.
+    ///
+    /// Set to 0 to disable: the slot collapses back to the bare ring and nothing
+    /// else changes.
+    static let ghostCapsuleOpacity: Double = 0.05
 }
 
 extension Home.RootView {
@@ -53,6 +70,48 @@ extension Home.RootView {
         .padding(.vertical, HeaderPill.verticalPadding + HeaderPill.loopOutlineOverhang)
         .padding(.horizontal, HeaderPill.horizontalPadding + HeaderPill.loopOutlineOverhang)
         .background(Capsule().fill(Color.primary.opacity(0.05)))
+    }
+
+    /// Invisible stand-in with a readout pill's exact geometry — icon slot, text
+    /// template, paddings — used to size the ghost capsule. Built from the same
+    /// `HeaderPill` constants as `headerReadoutPill`, so the two can't drift.
+    @ViewBuilder private var loopSlotTemplate: some View {
+        HStack(spacing: 5) {
+            // A real `Image`, exactly as `headerReadoutPill` uses — NOT `Color.clear`.
+            // Colour is infinitely flexible, so `.frame(width:)` pins only the width and
+            // it stretches to whatever height is offered, dragging the capsule with it.
+            Image(systemName: "circle")
+                .font(.callout)
+                .frame(width: HeaderPill.iconWidth, alignment: .center)
+            Text(HeaderPill.widthTemplate)
+                .font(.callout).fontWeight(.bold).fontDesign(.rounded)
+                .lineLimit(1)
+        }
+        .fixedSize()
+        .padding(.vertical, HeaderPill.verticalPadding + HeaderPill.loopOutlineOverhang)
+        .padding(.horizontal, HeaderPill.horizontalPadding + HeaderPill.loopOutlineOverhang)
+        .hidden()
+    }
+
+    /// Gives the loop element a constant, pill-sized footprint in every dosing
+    /// mode. See `HeaderPill.ghostCapsuleOpacity`.
+    ///
+    /// In closed loop `LoopView` draws its own capsule at exactly this size, so
+    /// this passes straight through — wrapping it there would double the chrome.
+    /// Outside closed loop the hidden template claims the slot and the ring
+    /// centres inside it; the `ZStack` (not `.background`) is what makes the slot
+    /// real, since a background paints outside the layout and the column would
+    /// still collapse around the bare ring.
+    @ViewBuilder private func loopSlot(@ViewBuilder _ content: () -> some View) -> some View {
+        if LoopView.showsCaption(automation: state.dosingMode.automation) || HeaderPill.ghostCapsuleOpacity <= 0 {
+            content()
+        } else {
+            ZStack {
+                loopSlotTemplate
+                content()
+            }
+            .background(Capsule().fill(Color.primary.opacity(HeaderPill.ghostCapsuleOpacity)))
+        }
     }
 
     /// IOB and COB readout pills. Device state (pod timer, reservoir,
@@ -226,17 +285,22 @@ extension Home.RootView {
         VStack(alignment: .center, spacing: 12) {
             /// Loop status — upstream's `LoopView`, unmodified; the ghost readout pills
             /// (IOB/COB/eventual) stay fill-only.
-            LoopView(
-                dosingMode: state.dosingMode,
-                timerDate: state.timerDate,
-                isLooping: state.isLooping,
-                lastLoopDate: state.lastLoopDate,
-                manualTempBasal: state.manualTempBasal,
-                lastGlucoseDate: state.lastGlucoseDate,
-                lastPumpCommsDate: state.lastPumpCommsDate,
-                hasDeviceIssue: state.hasDeviceIssue,
-                determination: state.determinationsFromPersistence
-            )
+            loopSlot {
+                LoopView(
+                    dosingMode: state.dosingMode,
+                    timerDate: state.timerDate,
+                    isLooping: state.isLooping,
+                    lastLoopDate: state.lastLoopDate,
+                    manualTempBasal: state.manualTempBasal,
+                    lastGlucoseDate: state.lastGlucoseDate,
+                    lastPumpCommsDate: state.lastPumpCommsDate,
+                    hasDeviceIssue: state.hasDeviceIssue,
+                    determination: state.determinationsFromPersistence
+                )
+            }
+            // on the slot, not the ring, so the whole pill-sized area is tappable
+            // outside closed loop — matching the capsule's target in closed loop
+            .contentShape(Capsule())
             .onTapGesture {
                 state.isLoopStatusPresented = true
             }

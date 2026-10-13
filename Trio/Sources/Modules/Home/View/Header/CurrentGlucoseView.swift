@@ -177,11 +177,17 @@ struct CurrentGlucoseView: View {
             parts.append(String(localized: "delta", comment: "Accessibility: glucose delta") + " \(delta)")
         }
         parts.append(TimeAgoFormatter.minutesAgoAccessible(from: glucose.last?.date))
-        // Fold in the sensor-lifecycle tag (warmup countdown, "expired", "stabilizing") so
-        // it is spoken; the visual tag is a child that the ignore above would otherwise drop.
-        if let tag = tagLabel, !trendIsDownward, !tag.text.isEmpty {
-            parts.append(tag.text)
-        }
+        // Upstream folds the sensor-lifecycle tag (warmup countdown, "expired",
+        // "stabilizing") in here, because on their bobble that tag is a child view the
+        // `.accessibilityElement(children: .ignore)` above would otherwise drop. This
+        // layout has no such child — sensor status lives in the CGM device tile — so
+        // their `tagLabel` / `trendIsDownward` do not exist here and the clause is gone.
+        //
+        // Expect this to come back on every merge that touches upstream's bobble a11y,
+        // and note it arrives *silently*: the definitions sit in regions this file
+        // deleted long ago, so git drops them without raising a conflict and only the
+        // compiler notices. If the tag is ever wanted spoken, it belongs on the device
+        // tile's own accessibility label, not here.
         return parts.joined(separator: ", ")
     }
 
@@ -218,9 +224,11 @@ struct CurrentGlucoseView: View {
     /// 12 minutes (one missed CGM transmission on a 5-min schedule) get
     /// masked to dashes. Handles warmup + sensor failure naturally: no
     /// fresh data → no number on the bobble.
+    /// The boundary itself lives in `GlucoseFreshness`, so this and the contact
+    /// image's glucose value cannot drift apart. They render differently past it —
+    /// the contact image keeps the number, dimmed — but they cross it together.
     private var isReadingFresh: Bool {
-        guard let date = glucose.last?.date else { return false }
-        return Date().timeIntervalSince(date) < 12 * 60
+        GlucoseFreshness.classify(glucoseDate: glucose.last?.date).isWithinDosingWindow
     }
 
     private func glucoseColor(for glucoseValue: Int16) -> Color {
