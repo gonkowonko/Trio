@@ -61,6 +61,33 @@ struct LiveActivityCustomView: View {
         return pushed
     }
 
+    /// LA-TINT-MANUAL: the banner tint, now the only loop indicator.
+    ///
+    /// Amber and red come from `loopDotState`, so they keep its push-free escalation.
+    /// Open loop and a manual temp basal are blue-grey: `.manualTemp` directly, and
+    /// `.inactive` when the pushed flags say the loop is deliberately not running.
+    /// `.inactive` with a closed loop means no loop has completed yet (or a state
+    /// from an older build) and stays untinted — indistinguishable from healthy, an
+    /// accepted cost of dropping the dot.
+    ///
+    /// Suspended delivery (added on device 2026-10-13) is blue-grey too, and outranks
+    /// amber and red: like a manual temp, it is a user choice, and the loop's age can
+    /// march on while nothing is wrong. The basal tile still says "Suspended" in red.
+    var bannerTint: LiveActivityCustomModifiers.Tint? {
+        if detail.basal?.isSuspended == true { return .manual }
+        switch loopDotState {
+        case .ok: return nil
+        case .late: return .late
+        case .overdue: return .overdue
+        case .manualTemp: return .manual
+        case .inactive:
+            guard let status = detail.loopStatus,
+                  !status.isClosedLoop || status.isManualTempBasal
+            else { return nil }
+            return .manual
+        }
+    }
+
     /// Row heights, and the gaps around the value row.
     ///
     /// These have to be budgeted, not just chosen. The lock screen caps the
@@ -209,14 +236,9 @@ struct LiveActivityCustomView: View {
             )
             .layoutPriority(2)
 
-            // Trailing the devices, and outside their `HStack` so it keeps the
-            // row's own 6pt spacing rather than the pills' tighter 4pt — the
-            // gap is what marks it as a different kind of thing from the pair
-            // beside it.
-            LiveActivityCustomLoopDotView(
-                state: loopDotState
-            )
-            .layoutPriority(2)
+            // LA-TINT-MANUAL: the loop dot used to trail the devices here. The
+            // banner tint carries loop status now; `LiveActivityCustomLoopDotView`
+            // is kept, unused, so the rollback is a one-site restore.
         }
         .frame(height: Self.statusHeight)
     }
@@ -253,7 +275,7 @@ struct LiveActivityCustomView: View {
                     target: state.target,
                     glucoseColorScheme: state.glucoseColorScheme,
                     // LA-TINT: same states that tint the banner.
-                    isTinted: loopDotState == .late || loopDotState == .overdue
+                    isTinted: bannerTint != nil
                 )
             }
             .frame(maxWidth: .infinity)
