@@ -20,6 +20,14 @@ struct LiveActivityCustomChartView: View {
     /// screen — a trace crossing from low to high shifts colour along its
     /// length rather than taking the current reading's colour throughout.
     let glucoseColorScheme: String
+    /// LA-TINT: true while the banner is tinted amber or red. `.secondary` grey
+    /// all but vanishes against the tint (seen on device 2026-10-11), so the
+    /// axis labels switch to a fixed white instead.
+    var isTinted: Bool = false
+
+    private var axisLabelStyle: AnyShapeStyle {
+        isTinted ? AnyShapeStyle(Color.white.opacity(0.75)) : AnyShapeStyle(.secondary)
+    }
 
     private static let window: TimeInterval = 3 * 60 * 60
 
@@ -151,7 +159,7 @@ struct LiveActivityCustomChartView: View {
                     if let number = value.as(Double.self) {
                         Text(axisLabel(number))
                             .font(.system(size: 9))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(axisLabelStyle)
                     }
                 }
             }
@@ -162,7 +170,7 @@ struct LiveActivityCustomChartView: View {
                     if let date = value.as(Date.self) {
                         Text(date, format: .dateTime.hour())
                             .font(.system(size: 9))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(axisLabelStyle)
                     }
                 }
             }

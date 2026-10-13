@@ -34,6 +34,43 @@ struct LiveActivityCustomModifiers: ViewModifier {
     /// only if `backgroundOpacity` alone cannot go dark enough.
     static let backgroundTint: Color = .clear
 
+    /// LA-TINT: the tint behind the banner when the loop is behind.
+    ///
+    /// A seventh go at loop health on the chrome, chosen from a mockup on
+    /// 2026-10-11. The full-banner wash failed because it was translucent and
+    /// drawn *over* the content. This is the system background tint instead,
+    /// behind the scrim and the chart rather than over them. It is *not*
+    /// opaque, despite the opaque colours below: on device (iOS 27) the system
+    /// still blends the wallpaper through it. The scrim darkens it by half, so these are
+    /// chosen bright enough to survive that.
+    ///
+    /// Healthy, open loop, manual temp and no data all stay `.clear` — the
+    /// healthy banner looks exactly as it did. Severity only, like the dot.
+    static func backgroundTint(for loopState: LiveActivityCustomPalette.LoopState?) -> Color {
+        switch loopState {
+        case .late: return Color(red: 0.62, green: 0.38, blue: 0.02)
+        case .overdue: return Color(red: 0.66, green: 0.09, blue: 0.09)
+        default: return backgroundTint
+        }
+    }
+
+    /// LA-TINT: the scrim is thinned while the banner is tinted. At the full 0.5
+    /// it sits over the tint and turns amber to brown (seen on device 2026-10-11).
+    /// 0.35 was tried while the chart's axis labels were still `.secondary`, which
+    /// 0.25 lost; they now go fixed white while tinted, so 0.25 holds. A healthy
+    /// banner keeps `backgroundOpacity` unchanged.
+    static let tintedBackgroundOpacity: Double = 0.25
+
+    static func backgroundOpacity(for loopState: LiveActivityCustomPalette.LoopState?) -> Double {
+        switch loopState {
+        case .late,
+             .overdue: return tintedBackgroundOpacity
+        default: return backgroundOpacity
+        }
+    }
+
+    var loopState: LiveActivityCustomPalette.LoopState?
+
     // Loop health was carried here for a while — first as a border, then a bar
     // along the foot, then a bar down the leading edge, then a wash over this
     // backdrop. All four put the signal on the banner's chrome, which meant the
@@ -47,13 +84,13 @@ struct LiveActivityCustomModifiers: ViewModifier {
             .frame(minHeight: 0, maxHeight: .infinity)
             .privacySensitive()
             .foregroundStyle(Color.primary)
-            .background(Color.black.opacity(Self.backgroundOpacity))
-            .activityBackgroundTint(Self.backgroundTint)
+            .background(Color.black.opacity(Self.backgroundOpacity(for: loopState)))
+            .activityBackgroundTint(Self.backgroundTint(for: loopState))
     }
 }
 
 extension View {
-    func addCustomLiveActivityModifiers() -> some View {
-        modifier(LiveActivityCustomModifiers())
+    func addCustomLiveActivityModifiers(loopState: LiveActivityCustomPalette.LoopState? = nil) -> some View {
+        modifier(LiveActivityCustomModifiers(loopState: loopState))
     }
 }

@@ -58,8 +58,10 @@ struct LiveActivityView: View {
             .addLiveActivityModifiers(isWatchOS: true)
 
         } else if context.state.lockScreenStyleIOS == .custom {
-            LiveActivityCustomView(context: context)
-                .addCustomLiveActivityModifiers()
+            // LA-TINT: the banner tint follows the loop dot's own state.
+            let custom = LiveActivityCustomView(context: context)
+            custom
+                .addCustomLiveActivityModifiers(loopState: custom.loopDotState)
 
         } else if context.state.lockScreenStyleIOS == .detailed {
             VStack {

@@ -45,7 +45,10 @@ struct LiveActivityCustomView: View {
     /// date + 360s, so this goes amber as long as the loop completed within 30s of its
     /// determination (observed 1–10s). The age check stops a false amber if a newer loop
     /// finished without a newer determination reaching the state.
-    private var loopDotState: LiveActivityCustomPalette.LoopState {
+    ///
+    /// LA-TINT: internal rather than private, so `LiveActivityView` can hand the same
+    /// value to the banner tint and the two can never disagree.
+    var loopDotState: LiveActivityCustomPalette.LoopState {
         let pushed = LiveActivityCustomPalette.loopState(for: detail.loopStatus)
         guard context.isStale, pushed == .ok,
               let lastLoopDate = detail.loopStatus?.lastLoopDate
@@ -248,7 +251,9 @@ struct LiveActivityCustomView: View {
                     low: state.lowGlucose,
                     high: state.highGlucose,
                     target: state.target,
-                    glucoseColorScheme: state.glucoseColorScheme
+                    glucoseColorScheme: state.glucoseColorScheme,
+                    // LA-TINT: same states that tint the banner.
+                    isTinted: loopDotState == .late || loopDotState == .overdue
                 )
             }
             .frame(maxWidth: .infinity)
