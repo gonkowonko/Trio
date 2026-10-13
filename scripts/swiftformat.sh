@@ -121,4 +121,5 @@ trailingClosures \
 --exclude LibreLoop \
 --exclude LibreCRKit \
 --exclude LoopAlgorithm \
+--exclude EversenseKit \
 --exclude AccuChekKit
