@@ -695,8 +695,7 @@ final class LiveActivityData: ObservableObject {
             timeline: SensorLifecycleTimeline.resolve(manager: manager),
             expiresAt: SensorExpiryResolver.expiresAt(
                 manager: manager,
-                glucoseSource: fetchGlucoseManager.glucoseSource,
-                lifecycle: fetchGlucoseManager.cgmProgressHighlight.value
+                glucoseSource: fetchGlucoseManager.glucoseSource
             )
         )
     }

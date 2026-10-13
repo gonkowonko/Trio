@@ -1,5 +1,7 @@
+import AccuChekKit
 import CGMBLEKit
 import CGMBLEKitUI
+import EversenseKit
 import Foundation
 import G7SensorKit
 import LibreLoop
@@ -91,55 +93,56 @@ struct SensorLifecycleTimeline: Equatable {
 /// is the richer source — it knows the grace end too — but only G7 exposes the
 /// anchors it needs, so everything else falls back to this bare date.
 enum SensorExpiryResolver {
-    /// Prefers manager-reported dates; reverse-derives from
-    /// `lifecycle.percentComplete` when not available. `activatedAt` must be
-    /// session start, not transmitter activation.
+    /// Manager-reported dates only. Mirrors upstream's
+    /// `HomeStateModel.resolveSensorExpiresAt` as of the 2026-10-13 merge, which
+    /// added Eversense and AccuChek, read Libre's own `expiresAt`, and dropped the
+    /// reverse-derivation from `lifecycle.percentComplete` (and with it the
+    /// `lifecycle` parameter). Keep the arms in step with upstream on each merge.
     static func expiresAt(
         manager: CGMManagerUI?,
         glucoseSource: GlucoseSource?,
-        lifecycle: DeviceLifecycleProgress?,
         now: Date = Date()
     ) -> Date? {
         if let sim = glucoseSource as? GlucoseSimulatorSource {
             return sim.simulatedSensorExpiresAt
         }
-        guard let manager else { return nil }
-        // Once a G7 enters grace period, `sensorExpiresAt` is in the past and
-        // would collapse the bobble countdown to "<1m" while the arc (driven by
-        // lifecycle.percentComplete against `sensorEndsAt`) is still mid-
-        // progress. Fall back to `sensorEndsAt` so bobble and arc agree, and
-        // the user sees grace-period time remaining.
-        if let g7 = manager as? G7CGMManager {
-            if let exp = g7.sensorExpiresAt, exp > now { return exp }
-            return g7.sensorEndsAt ?? g7.sensorExpiresAt
-        }
-        if let g6 = manager as? G6CGMManager, let exp = g6.latestReading?.sessionExpDate { return exp }
-        if let g5 = manager as? G5CGMManager, let exp = g5.latestReading?.sessionExpDate { return exp }
 
-        // LibreLoop reports time remaining rather than an expiry date, so it is
-        // resolved forward from `now`. Added when upstream introduced the
-        // manager; the other arms above all read a date off the manager.
-        if let libreLoop = manager as? LibreLoopCGMManager {
+        switch manager {
+        case let g7 as G7CGMManager:
+            // Once a G7 enters grace period, `sensorExpiresAt` is in the past
+            // and would collapse the bobble countdown to "<1m" while the arc
+            // (driven by lifecycle.percentComplete against `sensorEndsAt`) is
+            // still mid-progress. Fall back to `sensorEndsAt` so bobble and
+            // arc agree, and the user sees grace-period time remaining.
+            if let exp = g7.sensorExpiresAt, exp > now {
+                return exp
+            }
+            return g7.sensorEndsAt ?? g7.sensorExpiresAt
+
+        case let g6 as G6CGMManager:
+            return g6.latestReading?.sessionExpDate
+
+        case let g5 as G5CGMManager:
+            return g5.latestReading?.sessionExpDate
+
+        case let libreTransmitter as LibreTransmitterManagerV3:
+            return libreTransmitter.sensorInfoObservable.expiresAt
+
+        case let libreLoop as LibreLoopCGMManager:
             if case let .active(remaining, _) = libreLoop.sensorLifecycle, remaining > 0 {
                 return now.addingTimeInterval(remaining)
             }
-            // Warmup / initializing / expired — no meaningful expiry yet.
+            // Warmup / initializing / expired: no meaningful expiry yet.
+            return nil
+
+        case let eversense as EversenseCGMManager:
+            return eversense.state.expiresAt
+
+        case let accuChek as AccuChekCgmManager:
+            return accuChek.state.cgmEndTime
+
+        default:
             return nil
         }
-
-        let activatedAt: Date?
-        if let libre = manager as? LibreTransmitterManagerV3 {
-            activatedAt = libre.sensorInfoObservable.activatedAt
-        } else {
-            activatedAt = nil
-        }
-
-        guard let activatedAt,
-              let lifecycle,
-              lifecycle.percentComplete > 0.001
-        else { return nil }
-        let elapsed = now.timeIntervalSince(activatedAt)
-        guard elapsed > 0 else { return nil }
-        return activatedAt.addingTimeInterval(elapsed / lifecycle.percentComplete)
     }
 }

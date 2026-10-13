@@ -1,7 +1,9 @@
+import AccuChekKit
 import CGMBLEKit
 import CGMBLEKitUI
 import Combine
 import CoreData
+import EversenseKit
 import Foundation
 import G7SensorKit
 import LibreLoop
@@ -589,8 +591,7 @@ extension Home {
                     self.cgmDisplayState = displayState
                     self.cgmSensorExpiresAt = Self.resolveSensorExpiresAt(
                         manager: manager,
-                        glucoseSource: source,
-                        lifecycle: progress
+                        glucoseSource: source
                     )
                     self.cgmWarmupEndsAt = Self.resolveWarmupEndsAt(manager: manager)
                     self.cgmSensorTimeline = Self.resolveSensorTimeline(manager: manager)
@@ -617,8 +618,7 @@ extension Home {
                     self.cgmProgressHighlight = progress
                     self.cgmSensorExpiresAt = Self.resolveSensorExpiresAt(
                         manager: self.fetchGlucoseManager.cgmManager,
-                        glucoseSource: self.fetchGlucoseManager.glucoseSource,
-                        lifecycle: progress
+                        glucoseSource: self.fetchGlucoseManager.glucoseSource
                     )
                     self.cgmWarmupEndsAt = Self.resolveWarmupEndsAt(
                         manager: self.fetchGlucoseManager.cgmManager
@@ -888,40 +888,59 @@ extension Home {
             }
         }
 
-        /// Sensor expiration for the home label. Prefers manager-reported
-        /// dates; reverse-derives from `lifecycle.percentComplete` when not.
-        /// `activatedAt` must be session start, not transmitter activation.
+        /// Sensor expiration for the home label. LOCAL: delegates to the shared
+        /// `SensorExpiryResolver` so the Live Activity pills agree; upstream's arms
+        /// were moved there at the 2026-10-13 merge.
         private static func resolveSensorExpiresAt(
             manager: CGMManagerUI?,
-            glucoseSource: GlucoseSource?,
-            lifecycle: DeviceLifecycleProgress?
+            glucoseSource: GlucoseSource?
         ) -> Date? {
-            SensorExpiryResolver.expiresAt(manager: manager, glucoseSource: glucoseSource, lifecycle: lifecycle)
+            SensorExpiryResolver.expiresAt(manager: manager, glucoseSource: glucoseSource)
         }
 
         /// Wall-clock end of the sensor's warmup window; `nil` when not warming up.
+        /// Note: Libre 2 & Eversense do not emit/have warming up periods
         private static func resolveWarmupEndsAt(manager: CGMManagerUI?) -> Date? {
-            guard let manager else { return nil }
-            if let g7 = manager as? G7CGMManager {
-                guard let ends = g7.sensorFinishesWarmupAt, ends > Date() else { return nil }
+            switch manager {
+            case let g7 as G7CGMManager:
+                guard let ends = g7.sensorFinishesWarmupAt, ends > Date.now else {
+                    return nil
+                }
+
                 return ends
-            }
-            if let g6 = manager as? G6CGMManager, let start = g6.latestReading?.sessionStartDate {
+
+            case let g6 as G6CGMManager:
+                guard let start = g6.latestReading?.sessionStartDate else {
+                    return nil
+                }
+
                 let window: TimeInterval = g6.isAnubis ? 50 * 60 : 2 * 60 * 60
                 let ends = start.addingTimeInterval(window)
-                return ends > Date() ? ends : nil
-            }
-            if let g5 = manager as? G5CGMManager, let start = g5.latestReading?.sessionStartDate {
+                return ends > Date.now ? ends : nil
+
+            case let g5 as G5CGMManager:
+                guard let start = g5.latestReading?.sessionStartDate else {
+                    return nil
+                }
+
                 let ends = start.addingTimeInterval(2 * 60 * 60)
-                return ends > Date() ? ends : nil
-            }
-            if let libreLoop = manager as? LibreLoopCGMManager {
+                return ends > Date.now ? ends : nil
+
+            case let libreLoop as LibreLoopCGMManager:
                 if case let .warmup(_, remaining) = libreLoop.sensorLifecycle, remaining > 0 {
-                    return Date().addingTimeInterval(remaining)
+                    return Date.now.addingTimeInterval(remaining)
                 }
                 return nil
+
+            case let accuChek as AccuChekCgmManager:
+                if accuChek.state.calibrationPhase != .done, let warmupCompleted = accuChek.state.cgmWarmupCompleted {
+                    return warmupCompleted
+                }
+                return nil
+
+            default:
+                return nil
             }
-            return nil
         }
 
         /// Full-lifespan anchor dates for the always-on countdown ring. Currently
