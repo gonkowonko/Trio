@@ -39,6 +39,15 @@ import WidgetKit
 /// pills used by the Detailed layout, not a shared component: either stream has
 /// to be removable without disturbing the other. Note the two differ — the
 /// Detailed pills hide an unattached device where these grey it.
+/// **LA-PILL-FAULT (2026-10-13): outline = age, solid = fault.** Gary found amber
+/// "near expiry" and red "grace" too easy to confuse with a fault, since only a 9pt
+/// triangle told them apart. Now a status message fills the pill solid and the
+/// triangle becomes an icon naming the fault; the device icon stays, so which
+/// device it is never depends on position. Pump messages follow the driver's own
+/// warning/critical split (amber/red); CGM messages stay red, per the 10 Sep
+/// choice — the G7 rates "Sensor Expired" as normal, so its levels can't be used.
+/// The fill takes whichever is worse of the message and the lifecycle colour, so a
+/// pod in grace is never shown amber because of a lesser warning.
 struct LiveActivityCustomDevicePillsView: View {
     let cgm: LiveActivityAttributes.DeviceLifecycle?
     let pump: LiveActivityAttributes.DeviceLifecycle?
@@ -55,7 +64,8 @@ struct LiveActivityCustomDevicePillsView: View {
             LiveActivityCustomDevicePill(
                 symbol: "keyboard.onehanded.left",
                 lifecycle: pump,
-                status: pumpStatus
+                status: pumpStatus,
+                splitsWarnings: true
             )
         }
     }
@@ -65,6 +75,9 @@ struct LiveActivityCustomDevicePill: View {
     let symbol: String
     let lifecycle: LiveActivityAttributes.DeviceLifecycle?
     let status: LiveActivityAttributes.DeviceStatusMessage?
+    /// LA-PILL-FAULT: true for the pump — a non-critical message is amber rather
+    /// than red. The CGM leaves it false.
+    var splitsWarnings: Bool = false
 
     /// Shared with `LiveActivityCustomLoopDotView`, which sizes itself to match
     /// so the status row reads as elements of one size.
@@ -82,10 +95,8 @@ struct LiveActivityCustomDevicePill: View {
         lifecycle != nil || status != nil
     }
 
-    /// The pill's one colour. Every status message is red regardless of
-    /// `isCritical` — see the type's note.
-    private var severity: Color {
-        if status != nil { return LiveActivityCustomPalette.red }
+    /// The lifecycle colour — the outline's, and the floor for a fault's fill.
+    private var lifecycleColor: Color {
         guard let lifecycle else { return .white }
         switch lifecycle.phase {
         case .ok: return LiveActivityCustomPalette.green
@@ -95,27 +106,71 @@ struct LiveActivityCustomDevicePill: View {
         }
     }
 
+    /// LA-PILL-FAULT: the fill for a status message — the worse of the message's own
+    /// severity and the lifecycle colour.
+    private var faultColor: Color {
+        guard let status else { return lifecycleColor }
+        let messageIsRed = status.isCritical || !splitsWarnings
+        let lifecycleIsRed = lifecycle?.phase == .expired || lifecycle?.phase == .grace
+        return messageIsRed || lifecycleIsRed ? LiveActivityCustomPalette.red : .orange
+    }
+
+    /// LA-PILL-FAULT: an icon naming the fault, matched on the driver's English
+    /// message (Omnipod DASH and G7 wording). Anything unrecognised keeps the
+    /// warning triangle, so a new or translated message still reads as a fault.
+    private var faultSymbol: String {
+        let message = status?.message.lowercased() ?? ""
+        let table: [(String, String)] = [
+            ("signal loss", "antenna.radiowaves.left.and.right.slash"),
+            ("manual basal", "hand.raised.fill"),
+            ("suspended", "pause.fill"),
+            ("no insulin", "drop"),
+            ("occlusion", "nosign"),
+            ("expired", "hourglass"),
+            ("comms issue", "questionmark"),
+            ("no pod", "xmark"),
+            ("finish", "ellipsis"),
+            ("searching", "magnifyingglass"),
+            ("warmup", "timer"),
+            ("failed", "xmark.octagon.fill"),
+            ("error", "xmark.octagon.fill"),
+            ("issue", "exclamationmark")
+        ]
+        return table.first { message.contains($0.0) }?.1 ?? "exclamationmark.triangle.fill"
+    }
+
     var body: some View {
+        let isFault = status != nil
+        let color = isFault ? faultColor : lifecycleColor
+
         HStack(spacing: 3) {
             Image(systemName: symbol)
                 .font(.system(size: 10, weight: .semibold))
 
-            if status != nil {
-                // No room for the message; the marker says "open the app".
-                Image(systemName: "exclamationmark.triangle.fill")
+            if isFault {
+                // No room for the message; the icon names it.
+                Image(systemName: faultSymbol)
                     .font(.system(size: 9, weight: .bold))
             }
         }
-        .foregroundStyle(isAttached ? severity.opacity(Self.contentOpacity) : Color.white.opacity(0.3))
-        .padding(.horizontal, status != nil ? 7 : 5)
+        .foregroundStyle(
+            !isAttached ? Color.white.opacity(0.3)
+                : isFault ? Color.black.opacity(0.85)
+                : color.opacity(Self.contentOpacity)
+        )
+        .padding(.horizontal, isFault ? 7 : 5)
         .frame(height: Self.height)
         .frame(minWidth: Self.minimumWidth)
-        .background(
-            Capsule().strokeBorder(
-                isAttached ? severity.opacity(Self.ringOpacity) : Color.white.opacity(0.18),
-                lineWidth: 1
-            )
-        )
+        .background {
+            if isFault {
+                Capsule().fill(color.opacity(Self.contentOpacity))
+            } else {
+                Capsule().strokeBorder(
+                    isAttached ? color.opacity(Self.ringOpacity) : Color.white.opacity(0.18),
+                    lineWidth: 1
+                )
+            }
+        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(status?.message ?? "")
     }
