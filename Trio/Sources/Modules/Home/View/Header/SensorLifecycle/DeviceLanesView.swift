@@ -114,6 +114,11 @@ struct DeviceLanesView: View {
     let reservoir: Decimal?
     let battery: [OpenAPS_Battery]
     let pumpStatusHighlightMessage: String?
+    /// LANE-MANUAL: the highlight above is only Omnipod's "Manual Basal" notice —
+    /// the pod is healthy, so the gauge and readouts stay up.
+    var pumpStatusHighlightIsManualBasal: Bool = false
+    /// LANE-MANUAL: end of the running manual temp, for the lane's countdown.
+    var manualTempEndsAt: Date? = nil
 
     let onTapSensor: () -> Void
     let onTapPump: () -> Void
@@ -164,6 +169,8 @@ struct DeviceLanesView: View {
                         bar: podBar,
                         phase: podPhase,
                         label: podLabel,
+                        labelSymbol: showsManualTempLabel ? "hand.raised.fill" : nil,
+                        labelSymbolColor: .loopYellow,
                         sublabels: podSublabels
                     )
                 } else {
@@ -326,13 +333,19 @@ struct DeviceLanesView: View {
 
     // MARK: - Pod lane
 
+    /// LANE-MANUAL: a highlight that means the pod isn't in normal delivery.
+    /// Manual Basal isn't one — it's a temp the user chose on a working pod.
+    private var podHighlightBlocksGauge: Bool {
+        pumpStatusHighlightMessage != nil && !pumpStatusHighlightIsManualBasal
+    }
+
     private var podBar: DeviceLaneBar? {
         // A status highlight (No Pod, signal loss, fault…) means the pod isn't in
         // normal delivery, so the life/reservoir gauge is meaningless — and with
         // no pod paired it would just paint a full bar from the *previous* pod's
         // stale reservoir. Go neutral (empty track) and let the status text carry
         // it, mirroring how `sensorBar` blanks during a CGM status override.
-        if pumpStatusHighlightMessage != nil { return nil }
+        if podHighlightBlocksGauge { return nil }
         guard let expiresAt = podExpiresAt else {
             // Clockless pumps have no session timer to drain, so show a reservoir
             // gauge instead of an empty track. Capacity isn't exposed to the
@@ -371,9 +384,19 @@ struct DeviceLanesView: View {
     }
 
     private var podLabel: String {
-        if let message = pumpStatusHighlightMessage {
+        if podHighlightBlocksGauge, let message = pumpStatusHighlightMessage {
             // e.g. "⚠️ Insulin suspended" — takes over the whole readout.
             return message.replacingOccurrences(of: "\n", with: " ")
+        }
+        if showsManualTempLabel {
+            // Time only: the hand (`labelSymbol`) says "manual", as do the loop pill
+            // and the chart's basal tag. "✋ Manual – 2h 29m" pushed the reservoir
+            // out of the lane on device (2026-10-14). The word stays only as the
+            // fallback before the temp's end time reaches pump history.
+            guard let manualTempEndsAt else {
+                return String(localized: "Manual", comment: "Device lane label while a manual temp basal runs, end time unknown")
+            }
+            return DeviceLaneRemainingTimeFormatter.format(until: manualTempEndsAt, now: timerDate)
         }
         guard let expiresAt = podExpiresAt else {
             // Pumps without a session clock (Medtronic, Dana): lead with the
@@ -391,11 +414,22 @@ struct DeviceLanesView: View {
         return DeviceLaneRemainingTimeFormatter.format(until: expiresAt, now: timerDate)
     }
 
+    /// LANE-MANUAL: a manual temp's countdown takes the readout while the pod is
+    /// healthy. Once pod time is in its warning window or grace, the pod
+    /// countdown wins — the bar alone can't say "replace pod".
+    private var showsManualTempLabel: Bool {
+        guard !podHighlightBlocksGauge,
+              pumpStatusHighlightIsManualBasal || manualTempEndsAt != nil,
+              podPhase == .normal
+        else { return false }
+        return podExpiresAt.map { timerDate < $0 } ?? true
+    }
+
     private var podSublabels: [DeviceLaneSublabel] {
         var subs: [DeviceLaneSublabel] = []
         // When the label already leads with the reservoir (no session clock) or
         // a status message owns the readout, don't repeat it.
-        if podExpiresAt != nil, pumpStatusHighlightMessage == nil, let reservoirString {
+        if podExpiresAt != nil, !podHighlightBlocksGauge, let reservoirString {
             subs.append(DeviceLaneSublabel(text: reservoirString, color: reservoirColor))
         }
         if let percent = battery.first?.percent, battery.first?.display == true {
@@ -493,6 +527,13 @@ private struct DeviceLaneView: View {
     /// Overrides the label color when set (used for CGM status, which carries
     /// its own severity color); otherwise the label follows the phase accent.
     var labelColorOverride: Color? = nil
+    /// LANE-MANUAL: SF Symbol leading the label (the manual-temp hand, matching
+    /// the chart's basal tag). Same colour and size as the label text.
+    var labelSymbol: String? = nil
+    /// LANE-MANUAL: tints the symbol alone, so the time beside it stays a plain
+    /// white reading. Amber links the hand to the chart's amber manual-temp tag;
+    /// nil follows the label colour.
+    var labelSymbolColor: Color? = nil
     let sublabels: [DeviceLaneSublabel]
 
     private static let barHeight: CGFloat = 6
@@ -591,18 +632,29 @@ private struct DeviceLaneView: View {
                         .font(.footnote).fontWeight(.semibold).fontDesign(.rounded)
                         .foregroundStyle(sublabels[index].color)
                         .lineLimit(1)
+                        // LANE-MANUAL: never truncate a reading — "5…" is worse than
+                        // nothing. When the row is short, the label gives way instead.
+                        .fixedSize()
                 }
 
                 Spacer(minLength: 6)
 
                 // A heavier weight while alerting was tried (LANE-WASH, 2026-09-24) and
                 // dropped: with the wash and badge in place it added nothing.
-                Text(label)
-                    .font(.footnote).fontWeight(.semibold).fontDesign(.rounded)
-                    .foregroundStyle(labelColorOverride ?? accentColor)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                    .layoutPriority(1)
+                Group {
+                    if let labelSymbol {
+                        Text(Image(systemName: labelSymbol))
+                            .foregroundStyle(labelSymbolColor ?? labelColorOverride ?? accentColor)
+                            + Text(" ") + Text(label)
+                    } else {
+                        Text(label)
+                    }
+                }
+                .font(.footnote).fontWeight(.semibold).fontDesign(.rounded)
+                .foregroundStyle(labelColorOverride ?? accentColor)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .layoutPriority(1)
             }
         }
     }
@@ -806,6 +858,36 @@ enum DeviceLaneRemainingTimeFormatter {
         reservoir: nil,
         battery: [],
         pumpStatusHighlightMessage: nil,
+        onTapSensor: {},
+        onTapPump: {}
+    )
+    .padding(20)
+    .background(Color.bgDarkBlue)
+    .preferredColorScheme(.dark)
+}
+
+#Preview("Lanes — LANE-MANUAL manual temp") {
+    let start = Date().addingTimeInterval(-3 * 24 * 3600)
+    return DeviceLanesView(
+        timerDate: Date(),
+        cgmAvailable: true,
+        cgmName: "Dexcom G7",
+        sensorTimeline: SensorLifecycleTimeline(
+            start: start,
+            expiresAt: start.addingTimeInterval(10 * 24 * 3600),
+            endsAt: start.addingTimeInterval(10 * 24 * 3600 + 12 * 3600),
+            finalPhaseDuration: SensorLifecycleTimeline.defaultFinalPhaseDuration
+        ),
+        sensorProgress: nil,
+        sensorExpiresAt: nil,
+        pumpAvailable: true,
+        pumpName: "Omnipod DASH",
+        podExpiresAt: Date().addingTimeInterval(41 * 3600),
+        reservoir: 0xDEAD_BEEF,
+        battery: [],
+        pumpStatusHighlightMessage: "⚠️\nManual Basal",
+        pumpStatusHighlightIsManualBasal: true,
+        manualTempEndsAt: Date().addingTimeInterval(47 * 60),
         onTapSensor: {},
         onTapPump: {}
     )

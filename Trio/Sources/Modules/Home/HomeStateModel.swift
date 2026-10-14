@@ -171,6 +171,26 @@ extension Home {
             )
         }
 
+        /// LANE-MANUAL: the pump's status highlight is only the "Manual Basal" notice.
+        /// Omnipod raises a running manual temp through the same highlight as No Pod /
+        /// faults, and the pod lane blanks its gauge on any highlight. Set from the
+        /// same pump status read as `pumpStatusHighlightMessage`, so the two agree.
+        var pumpStatusHighlightIsManualBasal = false
+
+        /// LANE-MANUAL: when the running manual temp ends; nil when none is running.
+        /// Same end-time arithmetic as `activeBasalDelivery`, against the real clock.
+        var manualTempBasalEndsAt: Date? {
+            guard manualTempBasal, case .temp = activeBasalDelivery else { return nil }
+            let now = max(timerDate, Date())
+            guard let current = tempBasals.last(where: { ($0.timestamp ?? .distantFuture) <= now }),
+                  current.tempBasal?.isScheduledBasal != true
+            else { return nil }
+            let start = current.timestamp ?? .distantPast
+            let end = current.tempBasal?.endDate
+                ?? start.addingTimeInterval(Double(current.tempBasal?.duration ?? 0) * 60)
+            return end > now ? end : nil
+        }
+
         var showCarbsRequiredBadge: Bool = true
         var enableQuickPickTreatments: Bool = false
         var quickPickBolusSuggestions: [Decimal] = []
@@ -805,8 +825,15 @@ extension Home {
                 {
                     pumpStatusHighlightMessage = (statusHighlight.state == .warning ? "⚠️\n" : "‼️\n") + statusHighlight
                         .localizedMessage
+                    // LANE-MANUAL: Omnipod ranks No Insulin, Suspended and Signal Loss
+                    // (critical) above Manual Basal, so a *warning* while a manual temp
+                    // runs is the manual notice itself. Matching the localized text
+                    // would break in other languages.
+                    pumpStatusHighlightIsManualBasal = statusHighlight.state == .warning &&
+                        self.provider.deviceManager.pumpManager?.status.basalDeliveryState?.isManualTempBasal == true
                 } else {
                     pumpStatusHighlightMessage = nil
+                    pumpStatusHighlightIsManualBasal = false
                 }
             }
         }

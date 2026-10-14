@@ -201,6 +201,8 @@ extension Home.RootView {
             reservoir: state.reservoir,
             battery: state.batteryFromPersistence,
             pumpStatusHighlightMessage: state.pumpStatusHighlightMessage,
+            pumpStatusHighlightIsManualBasal: state.pumpStatusHighlightIsManualBasal,
+            manualTempEndsAt: state.manualTempBasalEndsAt,
             onTapSensor: {
                 if !state.cgmAvailable {
                     showCGMSelection.toggle()

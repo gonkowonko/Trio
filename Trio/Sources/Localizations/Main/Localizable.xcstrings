@@ -192302,7 +192302,7 @@
       }
     },
     "Manual" : {
-      "comment" : "Manual Bolus",
+      "comment" : "Device lane label while a manual temp basal runs, end time unknown\nManual Bolus",
       "localizations" : {
         "bg" : {
           "stringUnit" : {
