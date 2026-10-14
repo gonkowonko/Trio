@@ -72,6 +72,14 @@ struct CurrentGlucoseView: View {
 
     @ViewBuilder private func bobbleAndTag(triangleColor: Color) -> some View {
         ZStack {
+            // BOBBLE-GLOW: upstream's (e0052cc62) trend-coloured halo behind the ring.
+            // Delete this Circle to remove it; nothing else depends on it.
+            Circle()
+                .fill(triangleColor)
+                .frame(width: 124, height: 124)
+                .blur(radius: 24)
+                .opacity(colorScheme == .dark ? 0.32 : 0.20)
+
             TrendShape(gradient: angularGradient, color: triangleColor, showArrow: true)
                 .rotationEffect(.degrees(rotationDegrees))
 
