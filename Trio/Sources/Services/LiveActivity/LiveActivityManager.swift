@@ -850,6 +850,17 @@ final class LiveActivityData: ObservableObject {
         guard let highlight = apsManager.pumpManager?.pumpStatusHighlight,
               highlight.state == .warning || highlight.state == .critical
         else { return nil }
+        // LA-MANUAL-END: Omnipod reports a running manual temp as a *warning*
+        // highlight ("Manual Basal"), which painted the pump pill as a fault. It
+        // isn't one — the basal tile's amber hand and the banner tint already say
+        // "manual". Omnipod ranks No Insulin, Suspended and Signal Loss above it,
+        // so a warning during a manual temp is that notice. Same rule as the home
+        // screen's LANE-MANUAL; not matched on text, which is localized.
+        if highlight.state == .warning,
+           apsManager.pumpManager?.status.basalDeliveryState?.isManualTempBasal == true
+        {
+            return nil
+        }
         return LiveActivityAttributes.DeviceStatusMessage(
             message: highlight.localizedMessage.replacingOccurrences(of: "\n", with: " "),
             isCritical: highlight.state == .critical
@@ -886,10 +897,13 @@ final class LiveActivityData: ObservableObject {
             )
 
         case let .tempBasal(dose):
+            let isManual = apsManager.isManualTempBasal
             return LiveActivityAttributes.BasalStatus(
                 rate: Decimal(dose.unitsPerHour),
-                kind: apsManager.isManualTempBasal ? .manualTemp : .temp,
-                isSuspended: false
+                kind: isManual ? .manualTemp : .temp,
+                isSuspended: false,
+                // LA-MANUAL-END: the pump's own end time for the running temp.
+                endsAt: isManual ? dose.endDate : nil
             )
 
         case .suspended:

@@ -83,6 +83,13 @@ struct LiveActivityAttributes: ActivityAttributes {
         /// Suspension is the loudest thing the tile can say, so it takes the
         /// slot rather than showing a rate that is not being delivered.
         let isSuspended: Bool
+        /// LA-MANUAL-END: when a manual temp ends, shown in the basal tile's caption
+        /// as a clock time. A clock time never goes stale between pushes, where a
+        /// "30m" would sit frozen until the next update; a ticking timer would
+        /// redraw the lock screen every second. Optional with a default so a
+        /// state encoded by an older build still decodes. Nil unless `kind` is
+        /// `.manualTemp`.
+        var endsAt: Date? = nil
     }
 
     /// A device's live problem — warming up, signal loss, pod fault, occlusion.

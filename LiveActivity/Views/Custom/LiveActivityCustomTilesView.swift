@@ -100,6 +100,21 @@ struct LiveActivityCustomTilesView: View {
     /// hand when it was set by hand rather than by the algorithm — the same
     /// distinction the home screen's basal tag draws, carried by colour and
     /// icon instead of by the filled/outlined capsule this row has no room for.
+    /// LA-MANUAL-END: "until 10:12" while a manual temp runs — the hand and
+    /// "U/hr" already say it's basal, so the caption is the free slot. A clock
+    /// time, not a countdown: it stays true between pushes at no render cost.
+    /// Falls back to "Basal" if the end has passed (a push is due) or is unknown.
+    private static func basalCaption(manualEndsAt: Date?) -> String {
+        guard let manualEndsAt, manualEndsAt > Date() else {
+            return String(localized: "Basal", comment: "Basal tile caption, Custom Live Activity")
+        }
+        let time = manualEndsAt.formatted(date: .omitted, time: .shortened)
+        return String(
+            localized: "until \(time)",
+            comment: "Basal tile caption while a manual temp basal runs: the clock time it ends, Custom Live Activity"
+        )
+    }
+
     @ViewBuilder private var basalTile: some View {
         if let basal {
             if basal.isSuspended {
@@ -115,7 +130,7 @@ struct LiveActivityCustomTilesView: View {
                 LiveActivityCustomTile(
                     symbol: isManual ? "hand.raised.fill" : "drop.fill",
                     value: rate + " " + String(localized: "U/hr", comment: "Insulin units per hour"),
-                    caption: String(localized: "Basal", comment: "Basal tile caption, Custom Live Activity"),
+                    caption: Self.basalCaption(manualEndsAt: isManual ? basal.endsAt : nil),
                     tint: isManual ? LiveActivityCustomPalette.yellow : LiveActivityCustomPalette.insulin
                 )
             }
