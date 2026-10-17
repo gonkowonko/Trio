@@ -510,6 +510,7 @@ final class BaseContactImageManager: NSObject, ContactImageManager, Injectable {
 
                 state.glucose = Formatter.glucoseFormatter(for: units).string(from: value as NSNumber)
                 state.glucoseDate = firstGlucoseValue.date
+                state.glucoseValue = value
                 state.trend = firstGlucoseValue.directionEnum?.symbol
                 state.direction = firstGlucoseValue.directionEnum
 
@@ -521,6 +522,7 @@ final class BaseContactImageManager: NSObject, ContactImageManager, Injectable {
             } else {
                 // fetchGlucose() only looks back 20 minutes, so an empty result means dropout.
                 state.glucose = nil
+                state.glucoseValue = nil
                 state.trend = nil
                 state.direction = nil
                 state.glucoseDate = nil

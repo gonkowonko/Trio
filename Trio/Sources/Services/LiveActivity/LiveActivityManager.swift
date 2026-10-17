@@ -562,6 +562,7 @@ final class LiveActivityData: ObservableObject {
                         .ContentState(
                             unit: settings.units.rawValue,
                             bg: "--",
+                            glucose: nil,
                             direction: nil,
                             change: "--",
                             date: Date.now,
@@ -571,6 +572,7 @@ final class LiveActivityData: ObservableObject {
                             glucoseColorScheme: settings.glucoseColorScheme.rawValue,
                             lockScreenStyleIOS: .simple,
                             lockScreenStyleWatchOS: .simple,
+                            simpleViewStyle: LiveActivityAttributes.SimpleViewStyle(settings: settings),
                             detailedViewState: LiveActivityAttributes.ContentAdditionalState(
                                 chart: [],
                                 rotationDegrees: 0,
