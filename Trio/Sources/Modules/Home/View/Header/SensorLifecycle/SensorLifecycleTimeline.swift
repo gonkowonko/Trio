@@ -71,8 +71,14 @@ struct SensorLifecycleTimeline: Equatable {
     /// Builds a timeline from a CGM manager. Currently G7 only — it is the one
     /// manager exposing activation, lifetime *and* grace end. Other CGMs return
     /// `nil`, leaving callers to fall back to a bare expiry date.
+    ///
+    /// G7 dates are withheld until the sensor's version reply has said how long
+    /// its session is. Until then `lifetime` assumes 10 days, which puts a fresh
+    /// 15-day sensor's expiry days early for the second before the reply lands.
+    /// Same guard as G7SensorKit's own lifecycle bar (`87c3e16`).
     static func resolve(manager: CGMManagerUI?) -> SensorLifecycleTimeline? {
         guard let g7 = manager as? G7CGMManager,
+              g7.state.extendedVersion != nil,
               let start = g7.sensorActivatedAt,
               let expiresAt = g7.sensorExpiresAt,
               let endsAt = g7.sensorEndsAt
@@ -109,6 +115,8 @@ enum SensorExpiryResolver {
 
         switch manager {
         case let g7 as G7CGMManager:
+            // No date until the session length is known; see `SensorLifecycleTimeline.resolve`.
+            guard g7.state.extendedVersion != nil else { return nil }
             // Once a G7 enters grace period, `sensorExpiresAt` is in the past
             // and would collapse the bobble countdown to "<1m" while the arc
             // (driven by lifecycle.percentComplete against `sensorEndsAt`) is

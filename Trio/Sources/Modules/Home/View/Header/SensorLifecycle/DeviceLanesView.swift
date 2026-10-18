@@ -559,12 +559,17 @@ private struct DeviceLaneView: View {
     ///
     /// A CGM status whose own colour is `.secondary` is informational, not an alert,
     /// and is filtered out here for the same reason the card tint filters it.
-    private var alertAccent: Color? {
-        if bar?.graceRemaining != nil { return .loopRed }
-        if let labelColorOverride, labelColorOverride != .secondary { return labelColorOverride }
+    ///
+    /// The glyph: time running out (nearing expiry, grace) is a clock; a status
+    /// message is a fault, so a triangle whatever its colour.
+    private var alertBadge: (accent: Color, systemName: String)? {
+        if bar?.graceRemaining != nil { return (.loopRed, "clock") }
+        if let labelColorOverride, labelColorOverride != .secondary {
+            return (labelColorOverride, "exclamationmark.triangle.fill")
+        }
         switch phase {
         case .critical,
-             .warning: return phase.color
+             .warning: return (phase.color, "clock")
         case .normal: return nil
         }
     }
@@ -590,11 +595,8 @@ private struct DeviceLaneView: View {
                 // LANE-WASH: an alert lane swaps the device icon for a filled status
                 // badge. It *replaces* the icon rather than adding a glyph beside it,
                 // so it costs ~3pt, not the ~16pt that sank the 2026-09-20 attempt.
-                if let alertAccent {
-                    DeviceLaneStatusBadge(
-                        accent: alertAccent,
-                        systemName: alertAccent == .loopRed ? "exclamationmark.triangle.fill" : "clock.fill"
-                    )
+                if let alertBadge {
+                    DeviceLaneStatusBadge(accent: alertBadge.accent, systemName: alertBadge.systemName)
                 } else {
                     Image(systemName: iconSystemName)
                         .font(.caption)
@@ -687,19 +689,19 @@ private struct DeviceLaneView: View {
 
 // MARK: - LANE-WASH: alert badge
 
-/// LANE-WASH: filled circle in the lane's accent with a dark glyph, standing in
-/// for the device icon while the lane needs attention. Sized to the footnote line
-/// so row 1 doesn't grow.
+/// LANE-WASH: a glyph in the lane's accent, standing in for the device icon while
+/// the lane needs attention. Same font as the device icon so row 1 doesn't grow.
+///
+/// LANE-BADGE-PLAIN (2026-10-18): was a dark glyph in a filled accent circle,
+/// which read as a blob on device. Now the bare glyph, as Gary asked.
 private struct DeviceLaneStatusBadge: View {
     let accent: Color
     let systemName: String
 
     var body: some View {
         Image(systemName: systemName)
-            .font(.system(size: 8, weight: .bold))
-            .foregroundStyle(Color.black.opacity(0.75))
-            .frame(width: 15, height: 15)
-            .background(Circle().fill(accent))
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(accent)
     }
 }
 

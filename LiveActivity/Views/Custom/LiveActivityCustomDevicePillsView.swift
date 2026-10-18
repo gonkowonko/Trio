@@ -131,6 +131,11 @@ struct LiveActivityCustomDevicePill: View {
             ("no pod", "xmark"),
             ("finish", "ellipsis"),
             ("searching", "magnifyingglass"),
+            // G7 direct connection: "Pair Sensor" / "Pair New Sensor",
+            // "Waiting for Sensor", "Connection Refused".
+            ("pair", "plus"),
+            ("waiting", "dot.radiowaves.left.and.right"),
+            ("refused", "lock.slash"),
             ("warmup", "timer"),
             ("failed", "xmark.octagon.fill"),
             ("error", "xmark.octagon.fill"),
