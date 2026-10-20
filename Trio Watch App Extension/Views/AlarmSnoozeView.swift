@@ -7,10 +7,15 @@ struct AlarmSnoozeView: View {
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 15)) { context in
-            let isSnoozed = state.snoozeUntilDate > context.date
-            let remainingMinutes = max(Int(ceil(state.snoozeUntilDate.timeIntervalSince(context.date) / 60)), 0)
+            // LOCAL: measure from now, not the stale tick date (+1 min bug; same fix as #1390 / #1381).
+            // max() keeps always-on frames rendered ahead of time on their own display date.
+            let now = max(context.date, Date())
+            let isSnoozed = state.snoozeUntilDate > now
+            let remainingMinutes = max(Int(ceil(state.snoozeUntilDate.timeIntervalSince(now) / 60)), 0)
 
-            VStack(spacing: 8) {
+            // LOCAL: same layout as page 1 (GlucoseTrendView): circle pinned to the top, status text
+            // spaced below, full-page frame; a centred VStack sat lower than the glucose bobble
+            VStack {
                 Button {
                     showingSnoozeOptions = true
                 } label: {
@@ -31,6 +36,8 @@ struct AlarmSnoozeView: View {
                 }
                 .buttonStyle(.plain)
 
+                Spacer()
+
                 Text(
                     isSnoozed
                         ? String(
@@ -41,7 +48,10 @@ struct AlarmSnoozeView: View {
                 )
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+
+                Spacer()
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text("Alarms"))
             .accessibilityValue(Text(
@@ -76,7 +86,11 @@ struct AlarmSnoozeOptionsView: View {
                         state.sendSnoozeRequest(minutes: 0)
                         onDismiss()
                     } label: {
-                        Label("End Snooze", systemImage: "alarm.waves.left.and.right.fill")
+                        // LOCAL: explicit spacing; the wide waves glyph overran Label's icon slot into the text
+                        HStack(spacing: 8) {
+                            Image(systemName: "alarm.waves.left.and.right.fill")
+                            Text("End Snooze")
+                        }
                     }
                     .foregroundColor(.white)
                     .listRowBackground(
