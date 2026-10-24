@@ -8,6 +8,7 @@ import LibreLoop
 import LibreTransmitter
 import LoopKit
 import LoopKitUI
+import SyaiKit
 
 /// Anchor dates describing a sensor's full lifespan, used to drive the
 /// always-on countdown ring around the glucose bobble. Populated per-CGM in
@@ -148,6 +149,9 @@ enum SensorExpiryResolver {
 
         case let accuChek as AccuChekCgmManager:
             return accuChek.state.cgmEndTime
+
+        case let syai as SyaiCGMManager:
+            return syai.sensorExpirationDate
 
         default:
             return nil

@@ -13,6 +13,7 @@ import LoopKitUI
 import Observation
 import SwiftDate
 import SwiftUI
+import SyaiKit
 
 extension Home {
     @Observable final class StateModel: BaseStateModel<Provider> {
@@ -976,6 +977,9 @@ extension Home {
                     return warmupCompleted
                 }
                 return nil
+
+            case let syai as SyaiCGMManager:
+                return syai.sensorWarmupEndDate
 
             default:
                 return nil
