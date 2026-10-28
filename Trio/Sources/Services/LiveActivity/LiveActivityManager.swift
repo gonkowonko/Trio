@@ -408,10 +408,7 @@ final class LiveActivityData: ObservableObject {
         do {
             data.determination = try await fetchAndMapDetermination()
         } catch {
-            debug(
-                .default,
-                "[LiveActivityManager] \(DebuggingIdentifiers.failed) failed to fetch and map determination: \(error)"
-            )
+            warning(.liveActivity, "Fetching determination for Live Activity failed", error: error)
         }
     }
 
@@ -420,7 +417,7 @@ final class LiveActivityData: ObservableObject {
         do {
             data.override = try await fetchAndMapOverride()
         } catch {
-            debug(.default, "[LiveActivityManager] \(DebuggingIdentifiers.failed) failed to fetch and map override: \(error)")
+            warning(.liveActivity, "Fetching override for Live Activity failed", error: error)
         }
     }
 
@@ -429,7 +426,7 @@ final class LiveActivityData: ObservableObject {
         do {
             data.tempTarget = try await fetchAndMapTempTarget()
         } catch {
-            debug(.default, "[LiveActivityManager] \(DebuggingIdentifiers.failed) failed to fetch and map temp target: \(error)")
+            warning(.liveActivity, "Fetching temp target for Live Activity failed", error: error)
         }
     }
 
@@ -456,10 +453,7 @@ final class LiveActivityData: ObservableObject {
             }
             data.glucoseFromPersistence = glucose
         } catch {
-            debug(
-                .default,
-                "[LiveActivityManager] \(DebuggingIdentifiers.failed) failed to fetch glucose with error: \(error)"
-            )
+            warning(.liveActivity, "Fetching glucose for Live Activity failed", error: error)
         }
     }
 
@@ -510,7 +504,7 @@ final class LiveActivityData: ObservableObject {
                 }
 
             if let currentActivity {
-                debug(.default, "[LiveActivityManager] Restored live activity: \(currentActivity.activity.id)")
+                debug(.liveActivity, "Restored Live Activity \(currentActivity.activity.id)")
             }
         }
 
@@ -523,11 +517,11 @@ final class LiveActivityData: ObservableObject {
 
         if let currentActivity {
             if currentActivity.needsRecreation(), UIApplication.shared.applicationState == .active {
-                debug(.default, "[LiveActivityManager] Ending current activity for recreation: \(currentActivity.activity.id)")
+                debug(.liveActivity, "Recreating Live Activity \(currentActivity.activity.id)")
                 await endActivity()
                 // After endActivity(), currentActivity is guaranteed to be nil
                 // No recursive task, but explicitly restart
-                debug(.default, "[LiveActivityManager] Re-pushing update after recreation.")
+                debug(.liveActivity, "Pushing update after recreation")
                 await pushUpdate(state, force: force)
             } else {
                 let content = ActivityContent(
@@ -539,19 +533,19 @@ final class LiveActivityData: ObservableObject {
                 if !force, let lastPushedState, lastPushedState == state,
                    let lastPushedAt, Date.now.timeIntervalSince(lastPushedAt) < Self.redundantPushWindow
                 {
-                    debug(.default, "[LiveActivityManager] Skipped redundant update: state unchanged")
+                    debug(.liveActivity, "Skipped redundant update: state unchanged")
                     return
                 }
 
                 // Before the update, check if currentActivity is still valid
                 if let stillCurrent = self.currentActivity, stillCurrent.activity.id == currentActivity.activity.id {
-                    debug(.default, "[LiveActivityManager] Updating current activity: \(stillCurrent.activity.id)")
+                    debug(.liveActivity, "Updating Live Activity \(stillCurrent.activity.id)")
                     await stillCurrent.activity.update(content)
                     // LA-COALESCE
                     lastPushedState = state
                     lastPushedAt = Date.now
                 } else {
-                    debug(.default, "[LiveActivityManager] Skipped update: currentActivity changed during pushUpdate.")
+                    debug(.liveActivity, "Update skipped, activity changed during push")
                 }
             }
         } else {
@@ -614,7 +608,7 @@ final class LiveActivityData: ObservableObject {
                     pushType: nil
                 )
                 currentActivity = ActiveActivity(activity: activity)
-                debug(.default, "[LiveActivityManager] Created new activity: \(activity.id)")
+                info(.liveActivity, "Started Live Activity \(activity.id)")
 
                 // Update the newly created activity with actual data
                 let updateContent = ActivityContent(
@@ -626,12 +620,9 @@ final class LiveActivityData: ObservableObject {
                 // usually follows it is coalesced like any other.
                 lastPushedState = state
                 lastPushedAt = Date.now
-                debug(.default, "[LiveActivityManager] Set initial content for new activity: \(activity.id)")
+                debug(.liveActivity, "Set initial content for Live Activity \(activity.id)")
             } catch {
-                debug(
-                    .default,
-                    "[LiveActivityManager]: Error creating new activity: \(error)"
-                )
+                warning(.liveActivity, "Starting Live Activity failed, will retry on next update", error: error)
                 // Reset currentActivity on error to allow retry on next update
                 currentActivity = nil
             }
@@ -640,7 +631,7 @@ final class LiveActivityData: ObservableObject {
 
     /// Ends the current live activity and ensures that all unknown activities are terminated.
     private func endActivity() async {
-        debug(.default, "[LiveActivityManager] Ending all live activities...")
+        debug(.liveActivity, "Ending all Live Activities")
 
         // LA-COALESCE: a new activity must never be compared against what the
         // previous one was showing.
@@ -648,17 +639,17 @@ final class LiveActivityData: ObservableObject {
         lastPushedAt = nil
 
         if let currentActivity {
-            debug(.default, "[LiveActivityManager] Ending current activity: \(currentActivity.activity.id)")
+            debug(.liveActivity, "Ending Live Activity \(currentActivity.activity.id)")
             await currentActivity.activity.end(nil, dismissalPolicy: .immediate)
             self.currentActivity = nil
         }
 
         for unknownActivity in Activity<LiveActivityAttributes>.activities {
-            debug(.default, "[LiveActivityManager] Ending unknown activity: \(unknownActivity.id)")
+            debug(.liveActivity, "Ending untracked Live Activity \(unknownActivity.id)")
             await unknownActivity.end(nil, dismissalPolicy: .immediate)
         }
 
-        debug(.default, "[LiveActivityManager] All live activities ended.")
+        info(.liveActivity, "All Live Activities ended")
     }
 
     /// Restarts the live activity from a Live Activity Intent.
@@ -672,17 +663,17 @@ final class LiveActivityData: ObservableObject {
         while (currentActivity != nil && currentActivity!.activity.activityState != .ended) || Activity<LiveActivityAttributes>
             .activities.contains(where: { $0.activityState != .ended })
         {
-            debug(.default, "[LiveActivityManager] Waiting for Live Activity to end...")
+            debug(.liveActivity, "Waiting for Live Activity to end")
             try? await Task.sleep(nanoseconds: 200_000_000) // 0.2s sleep
         }
 
         // Add additional delay to ensure iOS has fully cleaned up the previous activity
-        debug(.default, "[LiveActivityManager] Waiting additional time for iOS to clean up...")
+        debug(.liveActivity, "Waiting for iOS to clean up the ended Live Activity")
         try? await Task.sleep(nanoseconds: 1_000_000_000) // 1s additional delay
 
         await pushCurrentContent()
 
-        debug(.default, "[LiveActivityManager] Restarted Live Activity from LiveActivityIntent (via iOS Shortcut)")
+        info(.liveActivity, "Restarted Live Activity from shortcut")
     }
 }
 
@@ -959,7 +950,7 @@ final class LiveActivityData: ObservableObject {
         scheduleLoopSeverityRefresh(for: loopStatus)
 
         guard let glucose = data.glucoseFromPersistence, let bg = glucose.first else {
-            debug(.default, "[LiveActivityManager] pushCurrentContent: no current glucose data available")
+            debug(.liveActivity, "Live Activity not updated, no glucose available")
             return
         }
         // LA-BG-STALENESS: the same reading the view judges, the newest in the chart.
@@ -976,7 +967,7 @@ final class LiveActivityData: ObservableObject {
         let prevGlucose = data.glucoseFromPersistence?.dropFirst().first
 
         guard let determination = data.determination else {
-            debug(.default, "[LiveActivityManager] pushCurrentContent: no determination available")
+            debug(.liveActivity, "Live Activity not updated, no determination available")
             return
         }
 
