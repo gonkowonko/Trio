@@ -8,16 +8,15 @@ Trio is an open-source automated insulin delivery (AID) system for iOS, built on
 
 ## Building
 
-Trio requires Xcode. There is no command-line build for the main app target — open the workspace in Xcode and build there:
+Trio requires Xcode. Open the workspace with `xed .`, or compile from the command line (no simulator or device needed):
 
 ```sh
-xed .
+xcodebuild build -workspace Trio.xcworkspace -scheme Trio -destination 'generic/platform=iOS Simulator'
 ```
 
-Before building, create `ConfigOverride.xcconfig` with your Apple Developer Team ID:
-```sh
-echo 'DEVELOPER_TEAM = XXXXXXXXXX' > ConfigOverride.xcconfig
-```
+Check the log for `error:` lines rather than trusting `BUILD SUCCEEDED` alone: Xcode can skip recompiling changes in synchronized folders.
+
+`Config.xcconfig` includes `ConfigOverride.xcconfig` from `../../`, `../` and the repo root, in that order, and later files win. All three are git-ignored. The Apple Developer Team ID (`DEVELOPER_TEAM`) goes in one of them.
 
 Submodules must be initialized:
 ```sh
@@ -88,7 +87,7 @@ Each screen lives in `Trio/Sources/Modules/<ModuleName>/` and follows a fixed st
 
 ### Logging
 
-Use the global free functions: `debug(.category, "message")`, `info(...)`, `warning(...)`, `error(...)`. Categories are defined in `Logger.Category` (`.openAPS`, `.coreData`, `.apsManager`, `.nightscout`, etc.). `DebuggingIdentifiers` provides emoji constants (`✅`, `❌`, `⚫️⚫️⚫️`) used in log messages throughout the codebase.
+Use the global free functions `debug`, `info`, `warning`, `error` and `fault`, e.g. `warning(.storage, "Saving carbs failed", error: error)`. Categories are by subject, in `Logger.Category` (`Trio/Sources/Logger/Logger.swift`): `.loop`, `.algorithm`, `.pump`, `.cgm`, `.bolus`, `.treatments`, `.nightscout`, `.tidepool`, `.remote`, `.healthKit`, `.alerts`, `.watch`, `.liveActivity`, `.storage`, `.settings`, `.telemetry`, `.ui`, `.lifecycle`. The old categories (`.default`, `.service`, `.apsManager`, `.coreData`, …) were removed in Oct 2026. Write plain-language messages with no `[TypeName]` prefix or emoji; the Logging section of `CONTRIBUTING.md` has the house style. The watch app logs through `WatchLogger.shared.debug(.connectivity, …)` and friends.
 
 ### External Integrations
 
@@ -107,3 +106,14 @@ All user-facing strings must use `String(localized:)`. English strings are the s
 - Do not submit AI-generated pull requests; contributions must be fully understood and intentionally designed by the author.
 - Run SwiftFormat before committing. Avoid unrelated formatting changes.
 - Do not modify files in submodule directories.
+
+## This fork (gonkowonko/Trio)
+
+Local `dev` carries personal commits on top of `nightscout/Trio` `dev`.
+
+- Remotes: `upstream` = nightscout/Trio, fetch only (push URL `DISABLED`). Never push or open PRs there. `origin` = the gonkowonko/Trio fork; `dev` goes there only as a fast-forward after a clean build.
+- `Config.xcconfig` commits `BUNDLE_IDENTIFIER = …trio2` for the fork's TestFlight build. Keep that line; local Xcode builds get `…trio` from the ignored `../ConfigOverride.xcconfig`.
+- Local-only files that upstream doesn't have, so they never conflict: `Trio/Sources/Modules/Home/View/HomeRootView+HeaderPills.swift` (header pills), `Trio/Sources/Modules/Home/View/Header/SensorLifecycle/DeviceLanesView.swift` (device lanes) and `LiveActivity/Views/Custom/` (Custom Live Activity). Put local UI work in files like these rather than in upstream-shared ones.
+- Files that diverge locally and conflict on merges: `GlassChrome.swift`, `HomeRootView.swift`, `HomeLayout.swift`, `LiveActivityManager.swift` (`LA-COALESCE`), and `HomeStateModel.resolveSensorExpiresAt` (delegates to `SensorExpiryResolver`). Mark local edits in upstream files with `// LOCAL:` or a stream tag (e.g. `LA-COALESCE`).
+- New files under `Trio/Sources` need hand-written `project.pbxproj` entries; only `LiveActivity/Views` and `Preview Content` are synchronized groups.
+- Update from upstream with the `/trio-update-from-dev` skill.
