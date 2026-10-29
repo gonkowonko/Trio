@@ -35,8 +35,6 @@ struct WatchState: Hashable, Equatable, Sendable, Encodable, Decodable {
     var forecastConeMax: [Double] = []
     var forecastLines: [String: [Double]] = [:] // "iob" / "cob" / "uam" / "zt" -> values
 
-    var snoozeUntilDate: Date = .distantPast
-
     static func == (lhs: WatchState, rhs: WatchState) -> Bool {
         lhs.date == rhs.date &&
             lhs.currentGlucose == rhs.currentGlucose &&
@@ -65,8 +63,7 @@ struct WatchState: Hashable, Equatable, Sendable, Encodable, Decodable {
             lhs.forecastStartDate == rhs.forecastStartDate &&
             lhs.forecastConeMin == rhs.forecastConeMin &&
             lhs.forecastConeMax == rhs.forecastConeMax &&
-            lhs.forecastLines == rhs.forecastLines &&
-            lhs.snoozeUntilDate == rhs.snoozeUntilDate
+            lhs.forecastLines == rhs.forecastLines
     }
 
     func hash(into hasher: inout Hasher) {
@@ -99,6 +96,5 @@ struct WatchState: Hashable, Equatable, Sendable, Encodable, Decodable {
         hasher.combine(forecastConeMin)
         hasher.combine(forecastConeMax)
         hasher.combine(forecastLines)
-        hasher.combine(snoozeUntilDate)
     }
 }

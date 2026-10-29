@@ -54,7 +54,6 @@ enum WatchMessageKeys {
 
     // Notification Actions
     static let snoozeDuration = "snoozeDuration"
-    static let snoozeUntilDate = "snoozeUntilDate"
 
     // Forecast
     static let showForecastWatch = "showForecastWatch"

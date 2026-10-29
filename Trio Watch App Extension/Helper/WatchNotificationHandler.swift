@@ -38,18 +38,17 @@ final class WatchNotificationHandler: NSObject, UNUserNotificationCenterDelegate
         defer { completionHandler() }
 
         guard let action = NotificationResponseAction(rawValue: response.actionIdentifier) else { return }
-        sendSnoozeRequest(minutes: action.minutes)
+        sendSnoozeRequest(for: action)
     }
 
     /// Sends snooze request to iPhone via WatchConnectivity.
     /// WCSession.transferUserInfo is thread-safe and can be called from any thread.
     /// Relies on the watch app's WCSession owner (e.g., WatchState) to handle
     /// session activation and delegate management.
-    /// A duration of 0 ends the active snooze.
-    func sendSnoozeRequest(minutes: Int) {
+    private func sendSnoozeRequest(for action: NotificationResponseAction) {
         guard WCSession.isSupported() else { return }
 
-        let payload: [String: Any] = [WatchMessageKeys.snoozeDuration: minutes]
+        let payload: [String: Any] = [WatchMessageKeys.snoozeDuration: action.minutes]
         let session = WCSession.default
 
         // Try sendMessage first if session is reachable and activated (faster, immediate delivery)
