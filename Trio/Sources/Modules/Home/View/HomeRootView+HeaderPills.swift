@@ -317,7 +317,7 @@ extension Home.RootView {
                 text: {
                     if let eventualBG = state.enactedAndNonEnactedDeterminations.first?.eventualBG {
                         let eventualGlucose = eventualBG as Decimal
-                        return state.units == .mgdL ? eventualGlucose.description : eventualGlucose.formattedAsMmolL
+                        return eventualGlucose.formatted(for: state.units)
                     }
                     return "--"
                 }()

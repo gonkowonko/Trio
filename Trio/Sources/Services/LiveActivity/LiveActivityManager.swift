@@ -906,6 +906,11 @@ final class LiveActivityData: ObservableObject {
                 isSuspended: true
             )
 
+        // Upstream treats an inoperable pump as "not currently available", the
+        // same as the `.distantPast` sentinel above — so no rate is claimed.
+        case .pumpInoperable:
+            return nil
+
         // Mid-transition: initiating or cancelling a temp, suspending, resuming.
         // The old rate is no longer true and the new one is not yet known, so
         // report the transition as "unknown rate" rather than showing a stale
