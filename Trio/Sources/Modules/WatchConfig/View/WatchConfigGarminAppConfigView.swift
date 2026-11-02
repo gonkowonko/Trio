@@ -205,6 +205,9 @@ struct WatchConfigGarminAppConfigView: View {
                     }.padding(.bottom)
                 }
             ).listRowBackground(Color.chart)
+
+            // GARMIN-REMOTE
+            WatchConfigGarminRemoteSection(pumpMaxBolus: state.settingsManager.pumpSettings.maxBolus)
         }
         .listSectionSpacing(sectionSpacing)
         .scrollContentBackground(.hidden)

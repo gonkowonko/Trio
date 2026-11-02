@@ -72,6 +72,17 @@ final class BaseGarminManager: NSObject, GarminManager, Injectable {
     /// Keeps references to watch apps (both watchface & data field) for each registered device.
     private var watchApps: [IQApp] = []
 
+    // GARMIN-REMOTE: the TrioIQ Remote widget, one per device. Kept out of `watchApps` so it
+    // only gets replies to its own requests, never the status broadcast.
+    private var remoteApps: [IQApp] = []
+    private lazy var remoteHandler = GarminRemoteHandler(
+        apsManager: apsManager,
+        settingsManager: settingsManager,
+        watchState: { [weak self] in
+            (try? await self?.setupGarminWatchState(triggeredBy: GarminRemote.displayName)) ?? []
+        }
+    )
+
     /// A set of Combine cancellables for managing the lifecycle of various subscriptions.
     private var cancellables = Set<AnyCancellable>()
 
@@ -752,6 +763,7 @@ final class BaseGarminManager: NSObject, GarminManager, Injectable {
     /// - Parameter devices: The devices to register.
     private func registerDevices(_ devices: [IQDevice]) {
         watchApps.removeAll()
+        remoteApps.removeAll() // GARMIN-REMOTE
 
         // Reset broadcast hash so newly registered apps receive data
         // Without this, hash deduplication could skip sending to new apps if data unchanged
@@ -783,6 +795,14 @@ final class BaseGarminManager: NSObject, GarminManager, Injectable {
                 debugGarmin("Registered Garmin \(appDetailedName(for: datafieldUUID))")
                 watchApps.append(datafieldApp)
                 connectIQ?.register(forAppMessages: datafieldApp, delegate: self)
+            }
+
+            // GARMIN-REMOTE: always registered so it can show "Off in Trio"; GarminRemoteHandler
+            // refuses anything that isn't turned on
+            if let remoteApp = IQApp(uuid: GarminRemote.appUUID, store: UUID(), device: device) {
+                debugGarmin("Registered Garmin \(GarminRemote.displayName)")
+                remoteApps.append(remoteApp)
+                connectIQ?.register(forAppMessages: remoteApp, delegate: self)
             }
         }
     }
@@ -1070,6 +1090,20 @@ extension BaseGarminManager: IQUIOverrideDelegate, IQDeviceEventDelegate, IQAppM
     func receivedMessage(_ message: Any, from app: IQApp) {
         guard let appUUID = app.uuid else {
             debug(.watch, "Ignored message from Garmin app without UUID")
+            return
+        }
+
+        // GARMIN-REMOTE: carbs, bolus and status requests from the Edge widget. Replies skip
+        // sendMessage's retry and error log: the widget is often closed by the time one is sent,
+        // and a missed reply is recovered when it next opens.
+        if appUUID == GarminRemote.appUUID {
+            remoteHandler.handle(message) { [weak self] reply in
+                self?.connectIQ?.sendMessage(reply, to: app, progress: { _, _ in }, completion: { result in
+                    if result != .success {
+                        debug(.watch, "\(GarminRemote.displayName) not reachable for a reply")
+                    }
+                })
+            }
             return
         }
         let appName = appDisplayName(for: appUUID)
