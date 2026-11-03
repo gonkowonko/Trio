@@ -7,6 +7,7 @@ struct WatchConfigGarminAppConfigView: View {
     @State private var shouldDisplayHint2: Bool = false
     @State private var shouldDisplayHint3: Bool = false
     @State private var shouldDisplayHint4: Bool = false
+    @State private var shouldDisplayRemoteHint: Bool = false
     @State var hintDetent = PresentationDetent.large
     @State private var shouldShowWatchfaceSwitchConfirmDialog: Bool = false
 
@@ -207,13 +208,24 @@ struct WatchConfigGarminAppConfigView: View {
             ).listRowBackground(Color.chart)
 
             // GARMIN-REMOTE
-            WatchConfigGarminRemoteSection(pumpMaxBolus: state.settingsManager.pumpSettings.maxBolus)
+            WatchConfigGarminRemoteSection(
+                pumpMaxBolus: state.settingsManager.pumpSettings.maxBolus,
+                units: state.settingsManager.settings.units,
+                defaultSmbMinutes: state.settingsManager.preferences.maxSMBBasalMinutes,
+                defaultUamMinutes: state.settingsManager.preferences.maxUAMSMBBasalMinutes,
+                shouldDisplayHint: $shouldDisplayRemoteHint
+            )
         }
         .listSectionSpacing(sectionSpacing)
         .scrollContentBackground(.hidden)
         .background(appState.trioBackgroundColor(for: colorScheme))
 
         // MARK: - Help Sheets
+
+        // GARMIN-REMOTE
+        .sheet(isPresented: $shouldDisplayRemoteHint) {
+            WatchConfigGarminRemoteHint(hintDetent: $hintDetent, shouldDisplayHint: $shouldDisplayRemoteHint)
+        }
 
         .sheet(isPresented: $shouldDisplayHint1) {
             SettingInputHintView(

@@ -75,9 +75,11 @@ final class BaseGarminManager: NSObject, GarminManager, Injectable {
     // GARMIN-REMOTE: the TrioIQ Remote widget, one per device. Kept out of `watchApps` so it
     // only gets replies to its own requests, never the status broadcast.
     private var remoteApps: [IQApp] = []
+    @Injected() private var adjustmentManager: AdjustmentManager!
     private lazy var remoteHandler = GarminRemoteHandler(
         apsManager: apsManager,
         settingsManager: settingsManager,
+        adjustmentManager: adjustmentManager,
         watchState: { [weak self] in
             (try? await self?.setupGarminWatchState(triggeredBy: GarminRemote.displayName)) ?? []
         }

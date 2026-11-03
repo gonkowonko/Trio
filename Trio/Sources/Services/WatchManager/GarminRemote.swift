@@ -10,9 +10,14 @@ import Foundation
 //                    request the widget never heard back about (it closed while waiting)
 //   widget -> Trio : {"cmd":"carbs","g":20,"ts":<sec>,"id":"…"}
 //   widget -> Trio : {"cmd":"bolus","tenths":15,"ts":<sec>,"id":"…"}
-//   Trio -> widget : {"ack":"carbs"|"bolus","id":"…","ok":true|false,"reason":"…"}
+//   widget -> Trio : {"cmd":"override","preset":"<preset id>","ts":<sec>,"id":"…"}, or
+//                    {"cmd":"override","cancel":true,"ts":<sec>,"id":"…"} to stop the running one
+//   Trio -> widget : {"ack":"carbs"|"bolus"|"override","id":"…","ok":true|false,"reason":"…"}
 //   Trio -> widget : the Garmin watch state, plus "remote": true, and while each is allowed
-//                    "garminMaxCarbs", "garminCarbPresets" ([g, g]) / "garminMaxBolus".
+//                    "garminMaxCarbs", "garminCarbPresets" ([g, g]) / "garminMaxBolus" /
+//                    "garminOverrides" ([{"id","name","pct","min","target","smbOff"}], min 0 = until
+//                    stopped) and "activeOverride" {"id","name","pct","end","target","smbOff"} (end in
+//                    sec, 0 = until stopped). target is mg/dL, 0 = the usual target.
 //                    "lastCarbs" {"g","ts"} and "lastBolus" {"tenths","ts"}: newest from any
 //                    source in the last 12 hours. Also sent unasked after a Garmin entry's loop.
 //                    "pendingResult" {"id","ok","reason"} or {"id","unknown":true} when asked.
@@ -29,6 +34,9 @@ struct GarminRemoteSettings: Codable, Equatable {
     /// Grams on the widget's two carb buttons, never above maxCarbs
     var carbPresetA = 20
     var carbPresetB = 40
+    var isOverridesEnabled = false
+    /// Override presets offered on the widget, by preset id. Shown in Trio's preset order.
+    var overridePresetIDs: [String] = []
 
     init() {}
 
@@ -43,6 +51,10 @@ struct GarminRemoteSettings: Codable, Equatable {
         maxBolus = try container.decodeIfPresent(Decimal.self, forKey: .maxBolus) ?? defaults.maxBolus
         carbPresetA = try container.decodeIfPresent(Int.self, forKey: .carbPresetA) ?? defaults.carbPresetA
         carbPresetB = try container.decodeIfPresent(Int.self, forKey: .carbPresetB) ?? defaults.carbPresetB
+        isOverridesEnabled = try container.decodeIfPresent(Bool.self, forKey: .isOverridesEnabled) ?? defaults
+            .isOverridesEnabled
+        overridePresetIDs = try container.decodeIfPresent([String].self, forKey: .overridePresetIDs) ?? defaults
+            .overridePresetIDs
     }
 }
 
@@ -50,6 +62,8 @@ enum GarminRemote {
     /// Connect IQ app id of the TrioIQ Remote widget (its manifest.xml)
     static let appUUID = UUID(uuidString: "45dd5f22-a860-4e83-9521-f0a37443d800")!
     static let displayName = "TrioIQ Remote"
+    /// Most override presets the widget's list holds
+    static let maxOverrides = 8
 
     @Persisted(key: "GarminRemote.settings") static var settings = GarminRemoteSettings()
 }
@@ -68,11 +82,13 @@ private struct GarminRemoteHandledRequest: Codable, Equatable {
 final class GarminRemoteHandler {
     private let apsManager: APSManager
     private let settingsManager: SettingsManager
+    private let adjustmentManager: AdjustmentManager
     private let watchState: () async -> [GarminWatchState]
 
     /// Oldest request still acted on. Bolus is tight so a delayed message can't dose late.
     private let carbsMaxAge: TimeInterval = 15 * 60
     private let bolusMaxAge: TimeInterval = 2 * 60
+    private let overrideMaxAge: TimeInterval = 5 * 60
     /// Allowance for the Edge's clock running ahead of the phone's
     private let clockSkew: TimeInterval = 2 * 60
     /// Minimum gap between boluses from the Edge
@@ -84,9 +100,15 @@ final class GarminRemoteHandler {
     /// Ids being worked on right now; a repeat arriving meanwhile is dropped and the first one answers
     private var inFlight: Set<String> = []
 
-    init(apsManager: APSManager, settingsManager: SettingsManager, watchState: @escaping () async -> [GarminWatchState]) {
+    init(
+        apsManager: APSManager,
+        settingsManager: SettingsManager,
+        adjustmentManager: AdjustmentManager,
+        watchState: @escaping () async -> [GarminWatchState]
+    ) {
         self.apsManager = apsManager
         self.settingsManager = settingsManager
+        self.adjustmentManager = adjustmentManager
         self.watchState = watchState
     }
 
@@ -147,6 +169,8 @@ final class GarminRemoteHandler {
             handleCarbs(request, id: id, sentAt: sentAt, respond: respond, pushStatus: pushStatus)
         case "bolus":
             handleBolus(request, id: id, sentAt: sentAt, respond: respond, pushStatus: pushStatus)
+        case "override":
+            handleOverride(request, id: id, sentAt: sentAt, respond: respond, pushStatus: pushStatus)
         default:
             warning(.watch, "Ignored unknown TrioIQ Remote command \(command)")
         }
@@ -175,6 +199,16 @@ final class GarminRemoteHandler {
         }
         if settings.isBolusEnabled, effectiveMaxBolus > 0 {
             status["garminMaxBolus"] = NSDecimalNumber(decimal: effectiveMaxBolus).doubleValue
+        }
+
+        // The chosen presets, and whatever override is running (from anywhere) so the widget can
+        // show it and offer to stop it
+        if settings.isOverridesEnabled {
+            let overrides = await overrideStatus(allowedIDs: settings.overridePresetIDs)
+            status["garminOverrides"] = overrides.presets
+            if let active = overrides.active {
+                status["activeOverride"] = active
+            }
         }
 
         // Newest entries from any source, so the widget's "last" lines and double-entry
@@ -348,6 +382,125 @@ final class GarminRemoteHandler {
                 }
             await pushStatus()
         }
+    }
+
+    // MARK: - Overrides
+
+    private func handleOverride(
+        _ request: [String: Any],
+        id: String,
+        sentAt: TimeInterval,
+        respond: @escaping (Bool, String?) -> Void,
+        pushStatus: @escaping () async -> Void
+    ) {
+        let settings = GarminRemote.settings
+        guard settings.isOverridesEnabled else {
+            return refuse("Overrides off in Trio", id: id, respond: respond)
+        }
+        let cancel = request["cancel"] as? Bool == true
+        let presetID = request["preset"] as? String
+        // Only presets chosen for Garmin; stopping is allowed whatever is running
+        if !cancel {
+            guard let presetID, settings.overridePresetIDs.contains(presetID) else {
+                return refuse("Not offered on Garmin", id: id, respond: respond)
+            }
+        }
+        guard isCurrent(sentAt, maxAge: overrideMaxAge) else {
+            return refuse("Request too old", id: id, respond: respond)
+        }
+
+        inFlight.insert(id)
+        Task {
+            var ok = true
+            var reason: String?
+            do {
+                if cancel {
+                    try await self.adjustmentManager.cancelOverride(source: .watch)
+                    info(.treatments, "Override stopped from TrioIQ Remote")
+                } else if let presetID {
+                    try await self.adjustmentManager.activateOverride(.presetID(presetID), source: .watch)
+                    info(.treatments, "Override preset \(presetID) started from TrioIQ Remote")
+                }
+            } catch AdjustmentError.nothingActive {
+                ok = false
+                reason = "No override running"
+            } catch AdjustmentError.presetNotFound(_) {
+                ok = false
+                reason = "Preset not found"
+            } catch let failure {
+                warning(.treatments, "Override from TrioIQ Remote failed", error: failure)
+                ok = false
+                reason = cancel ? "Stop failed" : "Start failed"
+            }
+
+            let finalOK = ok
+            let finalReason = reason
+            await MainActor.run {
+                self.inFlight.remove(id)
+                if finalOK {
+                    respond(true, nil)
+                } else {
+                    self.refuse(finalReason ?? "Failed", id: id, respond: respond)
+                }
+            }
+            // The home button shows the new override (or none) without waiting to be asked
+            if finalOK {
+                await pushStatus()
+            }
+        }
+    }
+
+    /// The chosen presets in Trio's order, and the running override if there is one
+    private func overrideStatus(allowedIDs: [String]) async -> (presets: [[String: Any]], active: [String: Any]?) {
+        let allowed = Set(allowedIDs)
+        let context = CoreDataStack.shared.newTaskContext()
+        return await context.perform {
+            let presetRequest = OverrideStored.fetchRequest()
+            presetRequest.predicate = NSPredicate.allOverridePresets
+            presetRequest.sortDescriptors = [NSSortDescriptor(key: "orderPosition", ascending: true)]
+            let presets = ((try? context.fetch(presetRequest)) ?? [])
+                .filter { $0.id.map { allowed.contains($0) } ?? false }
+                .prefix(GarminRemote.maxOverrides)
+                .map { preset -> [String: Any] in
+                    [
+                        "id": preset.id ?? "",
+                        "name": preset.name ?? "Override",
+                        "pct": Int(preset.percentage.rounded()),
+                        "min": preset.indefinite ? 0 : (preset.duration?.intValue ?? 0),
+                        "target": Self.targetMgdL(preset),
+                        "smbOff": preset.smbIsOff || preset.smbIsScheduledOff
+                    ]
+                }
+
+            let activeRequest = OverrideStored.fetchRequest()
+            activeRequest.predicate = NSPredicate.lastActiveOverride
+            activeRequest.sortDescriptors = [NSSortDescriptor(key: "date", ascending: false)]
+            activeRequest.fetchLimit = 1
+            var active: [String: Any]?
+            if let row = try? context.fetch(activeRequest).first {
+                var end = 0
+                if !row.indefinite, let start = row.date, let minutes = row.duration?.doubleValue, minutes > 0 {
+                    end = Int(start.addingTimeInterval(minutes * 60).timeIntervalSince1970)
+                }
+                // Enabled but already run out: Trio no longer applies it
+                if end == 0 || TimeInterval(end) > Date().timeIntervalSince1970 {
+                    active = [
+                        "id": row.id ?? "",
+                        "name": row.name ?? "Override",
+                        "pct": Int(row.percentage.rounded()),
+                        "end": end,
+                        "target": Self.targetMgdL(row),
+                        "smbOff": row.smbIsOff || row.smbIsScheduledOff
+                    ]
+                }
+            }
+            return (Array(presets), active)
+        }
+    }
+
+    /// The override's target in whole mg/dL, 0 when it keeps the usual target
+    private static func targetMgdL(_ override: OverrideStored) -> Int {
+        Int((override.target?.doubleValue ?? 0).rounded())
     }
 
     /// What happened to a request the widget asked about. Nil while it's still being worked
