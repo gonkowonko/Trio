@@ -966,7 +966,11 @@ extension MainChartCanvas {
                 units: state.units,
                 maxValue: state.maxYAxisValue,
                 forecastDisplayType: state.forecastDisplayType,
-                lastDeterminationDate: state.determinationsFromPersistence.first?.deliverAt ?? .distantPast
+                // FORECAST-ANCHOR: anchor on the determination the forecast values come from
+                // (ForecastSetup reads enactedAndNonEnactedDeterminations.first), not the last enacted one,
+                // or the cone is stale or missing whenever loops run without enacting (manual temp, Open Loop).
+                // Upstream PR 1736; drop this local copy when that merges.
+                lastDeterminationDate: state.enactedAndNonEnactedDeterminations.first?.deliverAt ?? .distantPast
             )
 
             GlucoseChartView(

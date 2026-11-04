@@ -46,6 +46,8 @@ extension Home.StateModel {
         determinationControllerDelegate.onContentChange = { [weak self] in
             Task { @MainActor in
                 self?.updateDeterminationsFromController()
+                // FORECAST-ANCHOR: non-enacted determinations carry fresh forecasts too
+                self?.scheduleForecastUpdate()
             }
         }
 
