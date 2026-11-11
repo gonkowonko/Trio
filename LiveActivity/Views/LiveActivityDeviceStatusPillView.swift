@@ -164,9 +164,10 @@ struct LiveActivityDeviceStatusPill: View {
         }
     }
 
-    /// Local copy of `SensorRemainingTimeFormatter`, which currently lives in
-    /// the main app target. Fold the two together once that type is shared with
-    /// the LiveActivity target.
+    /// Deliberately coarse (`5d 14h`, `22h`, `45m`): minutes are dropped past an
+    /// hour so the text holds steady between the ~5 min Live Activity updates.
+    /// Kept local rather than using upstream's `Duration.formattedTimeSpan`,
+    /// which lives in the app target only and keeps the minutes under a day.
     static func coarseRemaining(until date: Date?, now: Date = Date()) -> String {
         guard let date else { return "--" }
         let totalMinutes = Int(max(0, date.timeIntervalSince(now))) / 60
