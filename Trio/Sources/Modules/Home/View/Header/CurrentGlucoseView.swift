@@ -152,7 +152,7 @@ struct CurrentGlucoseView: View {
     /// One combined VoiceOver description for the bobble, e.g.
     /// "Glucose 79 mg/dL, in range, falling, delta -2, 1 minute ago".
     private var bobbleAccessibilityLabel: String {
-        guard let glucoseValue = glucose.last?.glucose, isReadingFresh else {
+        guard let glucoseValue = glucose.last?.glucose, let date = glucose.last?.date, isReadingFresh else {
             return String(localized: "Glucose unavailable", comment: "Accessibility: no fresh glucose")
         }
         let valueString = glucoseValue == 400
@@ -164,7 +164,7 @@ struct CurrentGlucoseView: View {
         if delta != "--" {
             parts.append(String(localized: "delta", comment: "Accessibility: glucose delta") + " \(delta)")
         }
-        parts.append(TimeAgoFormatter.minutesAgoAccessible(from: glucose.last?.date))
+        parts.append(date.formattedSpokenTimeAgo())
         // Upstream folds the sensor-lifecycle tag (warmup countdown, "expired",
         // "stabilizing") in here, because on their bobble that tag is a child view the
         // `.accessibilityElement(children: .ignore)` above would otherwise drop. This
@@ -192,11 +192,10 @@ struct CurrentGlucoseView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        if isReadingFresh {
+        if let date = glucose.last?.date, isReadingFresh {
             HStack {
-                let minutesAgoString = TimeAgoFormatter.minutesAgo(from: glucose.last?.date)
                 Group {
-                    Text(minutesAgoString)
+                    Text(date.formattedTimeAgo())
                     Text(delta)
                 }
                 .font(.callout).fontWeight(.bold)
