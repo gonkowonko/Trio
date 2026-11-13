@@ -173,6 +173,13 @@ extension Home {
             // safe-area anchor: the tab bar can never cover the bottom controls
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 bottomControls()
+                    // LOCAL: PULL-LIFT — adjustment panel lifts with a soft shadow during the pull
+                    .background(alignment: .top) {
+                        HomePullLift(
+                            push: pullOffset + (isForcingLoop ? HomeLayout.refreshIndicatorHeight : 0),
+                            background: appState.trioBackgroundColor(for: colorScheme)
+                        )
+                    }
             }
             .background(appState.trioBackgroundColor(for: colorScheme))
             .onReceive(
