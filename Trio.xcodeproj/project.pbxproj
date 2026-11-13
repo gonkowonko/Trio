@@ -86,6 +86,7 @@
 		3811DE3225C9D49500A708ED /* HomeDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DE2A25C9D49500A708ED /* HomeDataFlow.swift */; };
 		3811DE3525C9D49500A708ED /* HomeRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DE2E25C9D49500A708ED /* HomeRootView.swift */; };
 		BD11C002000000000000C007 /* HomeRootView+HeaderPills.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD11C003000000000000C007 /* HomeRootView+HeaderPills.swift */; };
+		BD11C002000000000000C0F1 /* HomeRootView+PullFade.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD11C003000000000000C0F1 /* HomeRootView+PullFade.swift */; };
 		3811DE3F25C9D4A100A708ED /* SettingsStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DE3925C9D4A100A708ED /* SettingsStateModel.swift */; };
 		3811DE4125C9D4A100A708ED /* SettingsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DE3C25C9D4A100A708ED /* SettingsRootView.swift */; };
 		3811DE4225C9D4A100A708ED /* SettingsDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DE3D25C9D4A100A708ED /* SettingsDataFlow.swift */; };
@@ -1335,6 +1336,7 @@
 		3811DE2A25C9D49500A708ED /* HomeDataFlow.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HomeDataFlow.swift; sourceTree = "<group>"; };
 		3811DE2E25C9D49500A708ED /* HomeRootView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HomeRootView.swift; sourceTree = "<group>"; };
 		BD11C003000000000000C007 /* HomeRootView+HeaderPills.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeRootView+HeaderPills.swift"; sourceTree = "<group>"; };
+		BD11C003000000000000C0F1 /* HomeRootView+PullFade.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeRootView+PullFade.swift"; sourceTree = "<group>"; };
 		3811DE3925C9D4A100A708ED /* SettingsStateModel.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SettingsStateModel.swift; sourceTree = "<group>"; };
 		3811DE3C25C9D4A100A708ED /* SettingsRootView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SettingsRootView.swift; sourceTree = "<group>"; };
 		3811DE3D25C9D4A100A708ED /* SettingsDataFlow.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SettingsDataFlow.swift; sourceTree = "<group>"; };
@@ -2847,6 +2849,7 @@
 				7A11AC0DE00000000000000E /* HomeRootView+MealPanel.swift */,
 				7A11AC0DE00000000000000D /* HomeRootView+Header.swift */,
 				BD11C003000000000000C007 /* HomeRootView+HeaderPills.swift */,
+				BD11C003000000000000C0F1 /* HomeRootView+PullFade.swift */,
 				3833B51E260264AC003021B3 /* Chart */,
 				3833B51F260264B6003021B3 /* Header */,
 				FDB1D1005DA54C048E622761 /* QuickPickTreatments */,
@@ -6032,6 +6035,7 @@
 				7A11AC0DE00000000000010E /* HomeRootView+MealPanel.swift in Sources */,
 				7A11AC0DE00000000000010D /* HomeRootView+Header.swift in Sources */,
 				BD11C002000000000000C007 /* HomeRootView+HeaderPills.swift in Sources */,
+				BD11C002000000000000C0F1 /* HomeRootView+PullFade.swift in Sources */,
 				3E62C7822F54CC1B00433237 /* BolusDisplayThreshold.swift in Sources */,
 				3811DE6125C9D4D500A708ED /* ViewModifiers.swift in Sources */,
 				3811DEAC25C9D88300A708ED /* NightscoutManager.swift in Sources */,

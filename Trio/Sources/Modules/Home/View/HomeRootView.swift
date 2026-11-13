@@ -139,23 +139,37 @@ extension Home {
         @ViewBuilder func mainViewElements(_ geo: GeometryProxy) -> some View {
             // viewport-sized content: rubber-bands for the pull-down, never scrolls
             ScrollView(.vertical, showsIndicators: false) {
-                dashboardContent(geo)
-                    .padding(.top, isForcingLoop ? HomeLayout.refreshIndicatorHeight : 0)
-                    .animation(.easeInOut(duration: 0.25), value: isForcingLoop)
-                    .background(
-                        GeometryReader { g in
-                            Color.clear.preference(
-                                key: HomePullOffsetKey.self,
-                                value: g.frame(in: .named("homeScroll")).minY
-                            )
-                        }
-                    )
+                // LOCAL: PULL-FADE — the "Forcing loop…" row rides in the content (in the
+                // slot the top padding used to reserve) instead of the fixed overlay, so a
+                // second drag mid-loop moves it with the bobble rather than over it
+                VStack(spacing: 0) {
+                    if isForcingLoop {
+                        pullToRefreshIndicator
+                    }
+                    dashboardContent(geo)
+                }
+                .animation(.easeInOut(duration: 0.25), value: isForcingLoop)
+                // LOCAL: PULL-FADE — fade the dashboard out as the pull drags it into the bottom panels
+                .modifier(HomePullFadeMask(
+                    push: pullOffset + (isForcingLoop ? HomeLayout.refreshIndicatorHeight : 0)
+                ))
+                .background(
+                    GeometryReader { g in
+                        Color.clear.preference(
+                            key: HomePullOffsetKey.self,
+                            value: g.frame(in: .named("homeScroll")).minY
+                        )
+                    }
+                )
             }
             .coordinateSpace(name: "homeScroll")
             .scrollBounceBehavior(.always, axes: [.vertical])
             .modifier(HomePullOffsetReader(onChange: handlePullChange))
             .onPreferenceChange(HomePullOffsetKey.self) { handlePullChange($0) }
-            .overlay(alignment: .top) { pullToRefreshIndicator }
+            // pull hint only; the forcing-loop row lives in the content (PULL-FADE)
+            .overlay(alignment: .top) {
+                if !isForcingLoop { pullToRefreshIndicator }
+            }
             // safe-area anchor: the tab bar can never cover the bottom controls
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 bottomControls()
