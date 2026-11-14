@@ -188,7 +188,8 @@ final class BaseUserNotificationsManager: NSObject, UserNotificationsManager, In
 
     func requestNotificationPermissions(completion: @escaping (Bool) -> Void) {
         debug(.alerts, "Requesting notification permission")
-        notificationCenter.requestAuthorization(options: [.badge, .sound, .alert]) { granted, error in
+        // LOCAL: CRIT-ALERT — .criticalAlert asks for the Critical Alerts grant; iOS ignores it on builds without the entitlement.
+        notificationCenter.requestAuthorization(options: [.badge, .sound, .alert, .criticalAlert]) { granted, error in
             if granted {
                 info(.alerts, "Notification permission granted")
                 DispatchQueue.main.async {

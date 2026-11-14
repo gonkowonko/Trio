@@ -3,6 +3,7 @@ import CoreData
 import Foundation
 import SwiftUI
 import Swinject
+import UserNotifications
 
 extension Notification.Name {
     static let initializationCompleted = Notification.Name("initializationCompleted")
@@ -443,6 +444,25 @@ extension Notification.Name {
         }
 
         Task { await CriticalAlertAlarmScheduler.requestAuthorization() }
+        requestCriticalAlertAuthorizationIfNeeded() // LOCAL: CRIT-ALERT
+    }
+
+    /// LOCAL: CRIT-ALERT. Onboarding only asks for notification permission once, so installs that onboarded
+    /// before the Critical Alerts entitlement was added were never asked for it. Re-requesting with
+    /// `.criticalAlert` shows only the Critical Alerts prompt; iOS never asks twice.
+    @MainActor private func requestCriticalAlertAuthorizationIfNeeded() {
+        Task {
+            let center = UNUserNotificationCenter.current()
+            let settings = await center.notificationSettings()
+            guard settings.authorizationStatus == .authorized, settings.criticalAlertSetting != .enabled else { return }
+            do {
+                _ = try await center.requestAuthorization(options: [.badge, .sound, .alert, .criticalAlert])
+                let updated = await center.notificationSettings()
+                info(.alerts, "Critical Alerts permission is now \(updated.criticalAlertSetting.rawValue)")
+            } catch {
+                warning(.alerts, "Requesting Critical Alerts permission failed", error: error)
+            }
+        }
     }
 
     func configureTabBarAppearance() {
