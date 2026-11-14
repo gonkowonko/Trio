@@ -11,6 +11,10 @@ DEVELOPER_TEAM = ##TEAM_ID##
 // For example: myOwnApp.$(DEVELOPMENT_TEAM).trio
 BUNDLE_IDENTIFIER = org.nightscout.$(DEVELOPMENT_TEAM).trio2
 
+// LOCAL: main app entitlements. TestFlight (trio2) has no Critical Alerts grant, so it signs with
+// Trio.entitlements; ../ConfigOverride.xcconfig switches Xcode builds of .trio to TrioCriticalAlerts.entitlements.
+TRIO_ENTITLEMENTS = Trio/Resources/Trio.entitlements
+
 // Danger zone - do not modify these unless you know what you are doing
 
 // The TRIO_APP_GROUP_ID should not be modified - it is required to have this exact format
