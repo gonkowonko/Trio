@@ -194,10 +194,10 @@ extension Home.RootView {
                 Text(latestOverride.first?.name ?? String(localized: "Custom Override"))
                     .font(.subheadline).fontWeight(.semibold)
                     .frame(alignment: .leading)
-                Text(overrideString.text)
+                bannerSubtitle(overrideString.text) // LOCAL: PROFILE-BANNER
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .accessibilityLabel(overrideString.spoken)
+                    .accessibilityLabel(withBannerProfile(overrideString.spoken))
             }
         }
     }
@@ -208,10 +208,10 @@ extension Home.RootView {
             VStack(alignment: .leading, spacing: 1) {
                 Text(latestTempTarget.first?.name ?? String(localized: "Temp Target"))
                     .font(.subheadline).fontWeight(.semibold)
-                Text(tempTargetString.text)
+                bannerSubtitle(tempTargetString.text) // LOCAL: PROFILE-BANNER
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .accessibilityLabel(tempTargetString.spoken)
+                    .accessibilityLabel(withBannerProfile(tempTargetString.spoken))
             }
         }
     }
@@ -296,7 +296,7 @@ extension Home.RootView {
                     .font(.subheadline).fontWeight(.medium)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Text("Profile at \(1.0.formatted(.wholePercent))")
+                noAdjustmentSubtitle // LOCAL: PROFILE-BANNER
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity, alignment: .leading)

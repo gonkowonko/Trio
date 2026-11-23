@@ -405,77 +405,59 @@ extension Home.RootView {
     }
 }
 
-// MARK: - Therapy profile capsule (PROFILE-HEADER)
+// MARK: - Therapy profile in the adjustment banner (PROFILE-BANNER)
 
-extension HeaderPill {
-    /// PROFILE-HEADER: the active therapy profile sits in the header's top-leading
-    /// corner, opposite the alarms bell, instead of upstream's chip on the chart's
-    /// basal strip (PR 1788). Set to `false` to go back to upstream's chip: the
-    /// header capsule disappears and the chart chip returns. Nothing else changes.
-    static let profileInHeader = true
+/// PROFILE-BANNER: the active therapy profile (upstream PR 1788) is named in the
+/// adjustment banner's subtitle instead of upstream's chip on the chart's basal strip:
+/// "No Cycling profile at 100%" with no adjustment, "on No Cycling profile" on its own line
+/// under an override or temp target. "profile" because names often read like a status
+/// ("No Cycling", "Rest"). On Default the banner reads exactly as upstream's.
+enum ProfileBanner {
+    /// `false` brings back upstream's chart chip and leaves the banner as upstream's.
+    static let enabled = true
 }
 
 extension Home.RootView {
-    /// Concrete return type on purpose: `HomeRootView.swift` calls this, and an opaque
-    /// `some View` here changed type with every restyle. Incremental builds then left the
-    /// caller compiled against the old layout and Home crashed on redraw (23 Nov 2026).
-    /// Restyling `ProfileHeaderButton.body` doesn't change this signature.
-    var profileHeaderButton: ProfileHeaderButton {
-        ProfileHeaderButton(
-            profileName: HeaderPill.profileInHeader ? state.activeTherapyProfileName : nil,
-            action: openTherapyProfiles
-        )
+    /// The active profile's name, or nil on Default or while Default is the only profile
+    /// (upstream's `activeTherapyProfileName` is nil then).
+    var bannerProfileName: String? {
+        guard ProfileBanner.enabled,
+              let name = state.activeTherapyProfileName,
+              name != TrioTherapyProfile.defaultName
+        else { return nil }
+        return name
     }
 
-    /// Same route as the other Home → Settings shortcuts: switch tab, push the screen.
-    func openTherapyProfiles() {
-        selectedTab = 3
-        settingsPath.append(Screen.therapyProfiles)
+    /// No-adjustment subtitle: upstream's "Profile at 100%", with the name for "Profile".
+    /// The name is one step brighter than the rest of the line (which the caller keeps at
+    /// upstream's `.tertiary`), so a switched profile is noticeable at a glance.
+    var noAdjustmentSubtitle: Text {
+        let percent = 1.0.formatted(.wholePercent)
+        guard let name = bannerProfileName else { return Text(String(localized: "Profile at \(percent)")) }
+        return Text(name).foregroundStyle(.secondary) + Text(verbatim: " profile at \(percent)")
     }
-}
 
-/// PROFILE-HEADER label. Only present while there is more than one profile (upstream's
-/// rule: `activeTherapyProfileName` is nil while Default is the only one). On Default only
-/// the icon shows, in a circle matching the bell; another profile shows the icon and its
-/// name, so a name in the corner means "not Default". Tapping opens Settings → Therapy Profiles.
-struct ProfileHeaderButton: View {
-    let profileName: String?
-    let action: () -> Void
-
-    var body: some View {
-        if let profileName {
-            let isDefault = profileName == TrioTherapyProfile.defaultName
-
-            Button(action: action) {
-                // Mirrors the bell opposite: on Default the same 34pt glass circle as the
-                // idle bell; on another profile a 34pt glass capsule styled like the
-                // bell's snoozed capsule (footnote bold), so the two corners match.
-                if isDefault {
-                    Image(systemName: "person.crop.circle")
-                        .font(.callout) // same size as the readout pills' icons
-                        .foregroundStyle(.secondary)
-                        .frame(width: 34, height: 34)
-                        .glassCircle(strokeOpacity: 0.18)
-                } else {
-                    // Same layout as the readout pills below; the full name always shows.
-                    // Neutral icon: a profile is a normal choice, not a warning.
-                    HeaderControlPillLabel(
-                        systemImage: "person.crop.circle",
-                        iconColor: .secondary,
-                        // Grey: a profile is a calm choice; the snooze opposite stays white.
-                        textColor: .secondary,
-                        text: profileName
-                    )
-                    // LANE-STYLE: neutral, like a healthy device lane.
-                    .headerStatusCapsule(tint: nil)
-                }
+    /// Override or temp-target subtitle. Off Default the details keep to one line (cut
+    /// with "…") and "on <profile>" gets its own line below, with the name one step brighter
+    /// (`.primary`) than the caller's `.secondary`. Appending it inline wrapped mid-phrase
+    /// ("… · on" / "No Cycling") with a long override. On Default this is upstream's text.
+    @ViewBuilder func bannerSubtitle(_ subtitle: String) -> some View {
+        if let name = bannerProfileName {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(subtitle)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Text(verbatim: "on ") + Text(name).foregroundStyle(.primary) + Text(verbatim: " profile")
             }
-            .buttonStyle(.plain)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Text("Active profile \(profileName)"))
-            .accessibilityHint(Text("Opens Therapy Profiles"))
-            .accessibilityAddTraits(.isButton)
+        } else {
+            Text(subtitle)
         }
+    }
+
+    /// VoiceOver form: the subtitle plus ", on <profile>" off Default.
+    func withBannerProfile(_ subtitle: String) -> String {
+        guard let name = bannerProfileName else { return subtitle }
+        return "\(subtitle), on \(name) profile"
     }
 }
 
