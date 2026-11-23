@@ -309,9 +309,10 @@ final class LiveActivityData: ObservableObject {
         // `CgmDisplayState` on every CGM read callback. Mapping to `()` first
         // discards the value, making the redundancy impossible to detect
         // downstream. All five payloads are Equatable, so this is free.
-        // LA-COALESCE exception: `suspended` and `scheduledBasal` deliberately
-        // keep their duplicates. `DeviceDataManager` fires one of them on every
-        // pump status update, so they are the only signal that the *enacted*
+        // LA-COALESCE exception: `suspended` and `manualTempBasal` deliberately
+        // keep their duplicates. `DeviceDataManager` sends `manualTempBasal` on every
+        // pump status update (it replaced `scheduledBasal` here when upstream
+        // PR 1681 removed that subject), so they are the only signal that the *enacted*
         // basal rate changed — a temp going 0.4 -> 0 flips neither boolean.
         // De-duplicating them left the basal tile a full cycle behind the pump,
         // which is half of the 2026-08-22 wrong-rate bug (see
@@ -321,8 +322,7 @@ final class LiveActivityData: ObservableObject {
         // rebuilding a struct in-process, not a push.
         Publishers.MergeMany(
             deviceDataManager.suspended.map { _ in () }.eraseToAnyPublisher(),
-            deviceDataManager.scheduledBasal.map { _ in () }.eraseToAnyPublisher(),
-            deviceDataManager.manualTempBasal.removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
+            deviceDataManager.manualTempBasal.map { _ in () }.eraseToAnyPublisher(),
             deviceDataManager.pumpExpiresAtDate.removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
             fetchGlucoseManager.cgmDisplayState.removeDuplicates().map { _ in () }.eraseToAnyPublisher()
         )

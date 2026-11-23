@@ -334,7 +334,12 @@ extension Home.RootView {
         /// (e.g. pod paired & not faulted). `apsManager` is an implicitly-
         /// unwrapped optional, so unwrap it safely — this tag is evaluated on
         /// every chart layout pass, possibly before injection has resolved it.
-        if let apsManager = state.apsManager, apsManager.isScheduledBasal != nil {
+        /// Upstream PR 1681 removed `APSManager.isScheduledBasal`, whose `nil` meant the
+        /// same two states as below, so read them from the pump's status directly.
+        if let apsManager = state.apsManager,
+           let delivery = apsManager.pumpManager?.status.basalDeliveryState,
+           delivery != .pumpInoperable, delivery != .active(.distantPast)
+        {
             if state.activeBasalDelivery == .suspended {
                 /// Suspension is the loudest thing the strip can say, so
                 /// it takes the slot rather than leaving it empty.
