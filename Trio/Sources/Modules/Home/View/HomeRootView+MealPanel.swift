@@ -69,19 +69,19 @@ extension Home.RootView {
         } label: {
             if isSnoozed {
                 // LOCAL: PILL-FLOOR. Laid out like the readout pills (icon slot left, text
-                // centred, at least their width) and the idle bell's 34pt height. Upstream's
-                // minutes style ("180 min", PR 1790); upstream's own bell still says "180 m".
-                // `remainingMinutes` rounds up, so a fresh 3 h snooze reads 180, not 179.
+                // centred, at least their width) and the idle bell's 34pt height. Compact
+                // span ("3h", "2h 59m", "45m"; COMPACT-SPAN) rather than upstream's "180 min".
+                // `remainingMinutes` rounds up, so a fresh 3 h snooze reads "3h", not "2h 59m".
                 HeaderControlPillLabel(
                     systemImage: "bell.slash.fill",
-                    iconColor: .orange, // matches the amber lane-style outline below
-                    // Amber like a device lane's value in warning ("6 hrs 7 min").
-                    textColor: .orange,
-                    text: Duration.seconds(remainingMinutes * 60).formattedTimeSpan(.minutes)
+                    // LOCAL: SNOOZE-GREY. Grey, not amber: amber was too strong and clashed
+                    // with the loop status. Roll back: .orange for both colours and the tint.
+                    iconColor: .secondary,
+                    textColor: .secondary,
+                    text: Duration.seconds(remainingMinutes * 60).compactTimeSpan() // COMPACT-SPAN
                 )
-                // LOCAL: LANE-STYLE. Muted alarms are a caution state, so the snoozed pill
-                // looks like a device lane at warning: amber wash and rim.
-                .headerStatusCapsule(tint: .orange)
+                // LOCAL: LANE-STYLE, neutral: no wash, a quiet rim like a healthy device lane.
+                .headerStatusCapsule(tint: nil)
             } else {
                 Image(systemName: "bell.fill")
                     .font(.callout) // LOCAL: same icon size as the header pills

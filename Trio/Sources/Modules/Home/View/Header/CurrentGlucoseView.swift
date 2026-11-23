@@ -195,7 +195,7 @@ struct CurrentGlucoseView: View {
         if let date = glucose.last?.date, isReadingFresh {
             HStack {
                 Group {
-                    Text(date.formattedTimeAgo())
+                    Text(date.compactTimeAgo()) // LOCAL: COMPACT-SPAN
                     Text(delta)
                 }
                 .font(.callout).fontWeight(.bold)

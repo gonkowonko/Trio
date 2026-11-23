@@ -280,10 +280,10 @@ struct DeviceLanesView: View {
         }
     }
 
-    /// Remaining time on upstream's shared format: `2d 18h`, `18h 59m`, `45m`, `< 1m`,
+    /// Remaining time, compact: `2d 18h`, `18h 59m`, `45m`, `< 1m`,
     /// rounded down. Clamped at zero, so a passed date reads `0m`.
     private func remainingText(until date: Date) -> String {
-        Duration.seconds(max(0, date.timeIntervalSince(timerDate))).formattedTimeSpan(.largestTwoUnits)
+        Duration.seconds(max(0, date.timeIntervalSince(timerDate))).compactTimeSpan() // COMPACT-SPAN
     }
 
     /// Live status (warmup / stabilizing / signal loss / error / expired) with

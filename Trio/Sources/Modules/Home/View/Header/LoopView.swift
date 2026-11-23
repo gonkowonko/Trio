@@ -211,7 +211,7 @@ struct LoopView: View {
     }
 
     private var timeString: String {
-        lastLoopDate.timeIntervalSinceNow < -24 * 60 * 60 ? "--" : lastLoopDate.formattedTimeAgo()
+        lastLoopDate.timeIntervalSinceNow < -24 * 60 * 60 ? "--" : lastLoopDate.compactTimeAgo() // LOCAL: COMPACT-SPAN
     }
 
     private var color: Color {
