@@ -68,19 +68,23 @@ extension Home.RootView {
             showSnoozeSheet = true
         } label: {
             if isSnoozed {
-                HStack(spacing: 4) {
-                    Image(systemName: "bell.slash.fill")
-                    Text("\(remainingMinutes) m")
-                        .font(.footnote).fontWeight(.bold).fontDesign(.rounded)
-                }
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .padding(.vertical, 6)
-                .padding(.horizontal, 10)
-                .glassCapsule(strokeOpacity: 0.22)
+                // LOCAL: PILL-FLOOR. Laid out like the readout pills (icon slot left, text
+                // centred, at least their width) and the idle bell's 34pt height. Upstream's
+                // minutes style ("180 min", PR 1790); upstream's own bell still says "180 m".
+                // `remainingMinutes` rounds up, so a fresh 3 h snooze reads 180, not 179.
+                HeaderControlPillLabel(
+                    systemImage: "bell.slash.fill",
+                    iconColor: .orange, // matches the amber lane-style outline below
+                    // Amber like a device lane's value in warning ("6 hrs 7 min").
+                    textColor: .orange,
+                    text: Duration.seconds(remainingMinutes * 60).formattedTimeSpan(.minutes)
+                )
+                // LOCAL: LANE-STYLE. Muted alarms are a caution state, so the snoozed pill
+                // looks like a device lane at warning: amber wash and rim.
+                .headerStatusCapsule(tint: .orange)
             } else {
                 Image(systemName: "bell.fill")
-                    .font(.subheadline)
+                    .font(.callout) // LOCAL: same icon size as the header pills
                     .foregroundStyle(.primary)
                     .frame(width: 34, height: 34)
                     .glassCircle(strokeOpacity: 0.18)

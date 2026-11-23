@@ -102,7 +102,8 @@ extension Home {
                     .offset(x: 0, y: -18)
             }
             .overlay(alignment: .topLeading) {
-                if let profileName = state.activeTherapyProfileName {
+                // LOCAL: PROFILE-HEADER moves this to the header (`profileHeaderButton`).
+                if !HeaderPill.profileInHeader, let profileName = state.activeTherapyProfileName {
                     HStack(spacing: 3) {
                         Image(systemName: "person.crop.circle")
                             .font(.system(size: 11, weight: .semibold))
@@ -260,6 +261,12 @@ extension Home {
                     alarmsButton
                         .padding(.top, -7)
                         .padding(.trailing, 10)
+                }
+                // LOCAL: PROFILE-HEADER, opposite the bell with the same inset.
+                .overlay(alignment: .topLeading) {
+                    profileHeaderButton
+                        .padding(.top, -7)
+                        .padding(.leading, 10)
                 }
 
                 /// device session lanes (CGM + pump) above the chart; replaces the

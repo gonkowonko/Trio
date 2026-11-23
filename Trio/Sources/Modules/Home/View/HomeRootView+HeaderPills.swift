@@ -404,3 +404,184 @@ extension Home.RootView {
         )
     }
 }
+
+// MARK: - Therapy profile capsule (PROFILE-HEADER)
+
+extension HeaderPill {
+    /// PROFILE-HEADER: the active therapy profile sits in the header's top-leading
+    /// corner, opposite the alarms bell, instead of upstream's chip on the chart's
+    /// basal strip (PR 1788). Set to `false` to go back to upstream's chip: the
+    /// header capsule disappears and the chart chip returns. Nothing else changes.
+    static let profileInHeader = true
+}
+
+extension Home.RootView {
+    /// Concrete return type on purpose: `HomeRootView.swift` calls this, and an opaque
+    /// `some View` here changed type with every restyle. Incremental builds then left the
+    /// caller compiled against the old layout and Home crashed on redraw (23 Nov 2026).
+    /// Restyling `ProfileHeaderButton.body` doesn't change this signature.
+    var profileHeaderButton: ProfileHeaderButton {
+        ProfileHeaderButton(
+            profileName: HeaderPill.profileInHeader ? state.activeTherapyProfileName : nil,
+            action: openTherapyProfiles
+        )
+    }
+
+    /// Same route as the other Home → Settings shortcuts: switch tab, push the screen.
+    func openTherapyProfiles() {
+        selectedTab = 3
+        settingsPath.append(Screen.therapyProfiles)
+    }
+}
+
+/// PROFILE-HEADER label. Only present while there is more than one profile (upstream's
+/// rule: `activeTherapyProfileName` is nil while Default is the only one). On Default only
+/// the icon shows, in a circle matching the bell; another profile shows the icon and its
+/// name, so a name in the corner means "not Default". Tapping opens Settings → Therapy Profiles.
+struct ProfileHeaderButton: View {
+    let profileName: String?
+    let action: () -> Void
+
+    var body: some View {
+        if let profileName {
+            let isDefault = profileName == TrioTherapyProfile.defaultName
+
+            Button(action: action) {
+                // Mirrors the bell opposite: on Default the same 34pt glass circle as the
+                // idle bell; on another profile a 34pt glass capsule styled like the
+                // bell's snoozed capsule (footnote bold), so the two corners match.
+                if isDefault {
+                    Image(systemName: "person.crop.circle")
+                        .font(.callout) // same size as the readout pills' icons
+                        .foregroundStyle(.secondary)
+                        .frame(width: 34, height: 34)
+                        .glassCircle(strokeOpacity: 0.18)
+                } else {
+                    // Same layout as the readout pills below; the full name always shows.
+                    // Neutral icon: a profile is a normal choice, not a warning.
+                    HeaderControlPillLabel(
+                        systemImage: "person.crop.circle",
+                        iconColor: .secondary,
+                        // Grey: a profile is a calm choice; the snooze opposite stays white.
+                        textColor: .secondary,
+                        text: profileName
+                    )
+                    // LANE-STYLE: neutral, like a healthy device lane.
+                    .headerStatusCapsule(tint: nil)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text("Active profile \(profileName)"))
+            .accessibilityHint(Text("Opens Therapy Profiles"))
+            .accessibilityAddTraits(.isButton)
+        }
+    }
+}
+
+/// PILL-FLOOR: label for the header's glass control capsules (profile, snoozed alarms),
+/// laid out exactly like a readout pill (IOB, COB, eventual): the icon in the fixed
+/// `HeaderPill.iconWidth` slot on the left, the text centred in a slot at least
+/// `HeaderPill.widthTemplate` wide. So the capsule is never narrower than the pills
+/// below, its icon lines up with theirs, and longer text widens only the text slot.
+///
+/// Deliberately a copy of `headerReadoutPill`'s geometry rather than shared with it, so
+/// this stream can be pulled out alone. Keep the two in step if `HeaderPill` changes.
+struct HeaderControlPillLabel: View {
+    let systemImage: String
+    /// Coloured like the readout pills' icons.
+    let iconColor: Color
+    /// White for a value that should stand out (snooze); grey for a calm one (profile).
+    var textColor: Color = .primary
+    let text: String
+
+    /// Text first shrinks to this scale to stay within the pill width; only beyond that
+    /// does the pill widen.
+    static let minimumTextScale: CGFloat = 0.75
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: systemImage)
+                .font(.callout) // same size as the readout pills' icons
+                .foregroundStyle(iconColor)
+                .frame(width: HeaderPill.iconWidth, alignment: .center)
+            ShrinkThenGrowLayout(minimumScale: Self.minimumTextScale) {
+                // Invisible width template, in the readout pills' own font — see `HeaderPill`.
+                Text(HeaderPill.widthTemplate)
+                    .hidden()
+                    .accessibilityHidden(true)
+                Text(text)
+                    .foregroundStyle(textColor)
+                    .lineLimit(1)
+                    // Looser than `minimumTextScale` on purpose: the slot is sized for that
+                    // scale, but SwiftUI shrinks in coarse steps and truncated right at the
+                    // limit ("No Cycli…"). The spare range only absorbs that rounding.
+                    .minimumScaleFactor(Self.minimumTextScale - 0.25)
+            }
+            // The readout pills' value font, so text and template are the same size.
+            .font(.callout).fontWeight(.bold).fontDesign(.rounded)
+        }
+        .padding(.horizontal, HeaderPill.horizontalPadding + HeaderPill.loopOutlineOverhang)
+        .frame(height: 34)
+    }
+}
+
+/// Two subviews: a width template, then the text. The slot is the template's width when
+/// the text fits it at full size or after shrinking to `minimumScale`; otherwise it widens
+/// just enough for the text at `minimumScale`. The text is then offered exactly the slot
+/// width, so its `minimumScaleFactor` does the shrinking.
+struct ShrinkThenGrowLayout: Layout {
+    let minimumScale: CGFloat
+
+    private func slotWidth(_ subviews: Subviews) -> CGFloat {
+        guard subviews.count == 2 else { return 0 }
+        let template = subviews[0].sizeThatFits(.unspecified).width
+        let natural = subviews[1].sizeThatFits(.unspecified).width
+        // +1 so rounding never pushes the minimum-scale text into truncation.
+        return max(template, (natural * minimumScale).rounded(.up) + 1)
+    }
+
+    func sizeThatFits(proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
+        let width = slotWidth(subviews)
+        let height = subviews.map { $0.sizeThatFits(.unspecified).height }.max() ?? 0
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
+        let slot = ProposedViewSize(width: bounds.width, height: bounds.height)
+        for subview in subviews {
+            subview.place(at: CGPoint(x: bounds.midX, y: bounds.midY), anchor: .center, proposal: slot)
+        }
+    }
+}
+
+// MARK: - Lane-style status capsule (LANE-STYLE)
+
+extension HeaderPill {
+    /// LANE-STYLE: the active header pills (non-Default profile, snoozed alarms) are drawn
+    /// like the device lanes rather than as glass: they report a state, and glass is
+    /// reserved for the controls at rest. Values copy `DeviceLaneMetrics` as they resolve
+    /// through `GlassPanelBackground`: a healthy lane is no fill and a 0.18 neutral rim;
+    /// an alert lane is an 18% wash (0.12 × `panelTintBoost` 1.5) and a 0.6 rim.
+    static let statusRestingRimOpacity: Double = 0.18
+    static let statusAlertWashOpacity: Double = 0.18
+    static let statusAlertRimOpacity: Double = 0.6
+}
+
+extension View {
+    /// LANE-STYLE capsule: `tint` nil is the neutral healthy-lane look; a tint (e.g.
+    /// `.orange` for a snooze) is the alert-lane wash and rim.
+    func headerStatusCapsule(tint: Color?) -> some View {
+        background(
+            Capsule().fill((tint ?? .clear).opacity(HeaderPill.statusAlertWashOpacity))
+        )
+        .overlay(
+            Capsule().strokeBorder(
+                (tint ?? .primary).opacity(
+                    tint == nil ? HeaderPill.statusRestingRimOpacity : HeaderPill.statusAlertRimOpacity
+                ),
+                lineWidth: 1
+            )
+        )
+    }
+}
