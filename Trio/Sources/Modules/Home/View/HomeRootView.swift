@@ -101,6 +101,26 @@ extension Home {
                 chartInfoButton
                     .offset(x: 0, y: -18)
             }
+            .overlay(alignment: .topLeading) {
+                if let profileName = state.activeTherapyProfileName {
+                    HStack(spacing: 3) {
+                        Image(systemName: "person.crop.circle")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text(profileName)
+                            .font(.system(size: 13, weight: .semibold))
+                            .fontDesign(.rounded)
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .glassMaterialFill(Capsule())
+                    .frame(height: chartHeight * 0.10)
+                    .padding(.leading, 16)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(Text("Active profile \(profileName)"))
+                }
+            }
             .overlay(alignment: .topTrailing) {
                 // shape-encoded basal tag: fill vs outline carries the delivery
                 // mode (loop-set temp vs scheduled profile), and it also surfaces
