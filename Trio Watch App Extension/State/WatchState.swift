@@ -1069,6 +1069,7 @@ extension WatchState {
     }
 
     private func saveComplicationSnapshot() {
+        logGlanceRedraws()
         guard let latestReading = shownReading else { return }
         let snapshot = complicationSnapshot(readingDate: latestReading.date, glucoseValue: latestReading.glucose)
         guard snapshot != lastSavedComplicationState else { return }
@@ -1083,6 +1084,29 @@ extension WatchState {
             WatchLogger.shared.info(.data, "Complication snapshot saved, reading \(readingAge) min old, loop \(loopAge)")
         } catch {
             WatchLogger.shared.warning(.data, "Complication snapshot not saved", error: error)
+        }
+    }
+
+    /// LOCAL: GLANCE-REDRAW-LOG. Writes out the timelines the Glance complication
+    /// built since the last wake (it notes them in the app group, see
+    /// `GlanceRedrawLog` in GlanceComplication.swift), so the log shows whether
+    /// each reload request was acted on and how long after the reading.
+    private func logGlanceRedraws() {
+        let key = "GlanceComplication.redraws"
+        guard let defaults = ComplicationStore.defaults,
+              let notes = defaults.array(forKey: key) as? [[Double]], !notes.isEmpty
+        else { return }
+        defaults.removeObject(forKey: key)
+        let clock = DateFormatter()
+        clock.dateFormat = "HH:mm:ss"
+        for note in notes where note.count == 2 {
+            let built = Date(timeIntervalSince1970: note[0])
+            let reading = Date(timeIntervalSince1970: note[1])
+            let lag = Int(built.timeIntervalSince(reading))
+            WatchLogger.shared.info(
+                .data,
+                "Glance redrew at \(clock.string(from: built)) with the \(clock.string(from: reading)) reading, \(lag) s after it"
+            )
         }
     }
 

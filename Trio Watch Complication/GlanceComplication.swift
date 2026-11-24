@@ -64,11 +64,30 @@ struct GlanceProvider: TimelineProvider {
         dates += state.staleTransitionDates(after: now, within: Self.totalSpan)
 
         let entries = Set(dates).sorted().map { GlanceEntry(date: $0, state: state, isPlaceholder: false) }
+        GlanceRedrawLog.record(builtAt: now, readingDate: state.date)
         completion(Timeline(entries: entries, policy: .atEnd))
     }
 
     static var sample: ComplicationState {
         ComplicationState.sample(units: ComplicationStore.load()?.units ?? ComplicationState.defaultUnits)
+    }
+}
+
+/// LOCAL: GLANCE-REDRAW-LOG. The extension can't reach the phone, so each
+/// timeline WidgetKit asks for is noted in the app group, and the watch app
+/// writes the notes into its log on its next wake (WatchState
+/// `logGlanceRedraws`). Shows whether a reload request was acted on, and how
+/// long after the reading. Remove this enum, its call in `getTimeline` and
+/// the watch-side reader to take it out.
+enum GlanceRedrawLog {
+    static let key = "GlanceComplication.redraws"
+    private static let limit = 60
+
+    static func record(builtAt: Date, readingDate: Date) {
+        guard let defaults = ComplicationStore.defaults else { return }
+        var notes = defaults.array(forKey: key) as? [[Double]] ?? []
+        notes.append([builtAt.timeIntervalSince1970, readingDate.timeIntervalSince1970])
+        defaults.set(Array(notes.suffix(limit)), forKey: key)
     }
 }
 
