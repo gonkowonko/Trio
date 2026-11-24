@@ -235,16 +235,29 @@ struct GlanceContent: View {
             // spread evenly across the row at similar sizes looked lost (seen on
             // device 2026-11-24), so the number now clearly leads.
             HStack(alignment: .center, spacing: 6) {
-                Text(model.glucoseWithArrow)
-                    .font(.system(size: 50, weight: .bold))
-                    .foregroundStyle(glucoseColor)
-                    .minimumScaleFactor(0.6)
-                    // Digits and arrows have no descenders and sit well below the
-                    // ascender, so trim the empty line box: the number grows to
-                    // the height of the two lines beside it without the row
-                    // getting taller and squeezing the graph.
-                    .padding(.vertical, -7)
-                    .layoutPriority(2)
+                // Arrow in white at 85% and about 60% of the number's size, as on
+                // the Custom Live Activity; only the number carries the glucose
+                // colour. Full-size white read brighter than the number and pulled
+                // the eye (seen on device 2026-11-24). Centred on the number, not
+                // on its baseline, where the smaller arrow would look slipped.
+                HStack(alignment: .center, spacing: 3) {
+                    Text(model.glucoseText)
+                        .font(.system(size: 50, weight: .bold))
+                        .foregroundStyle(glucoseColor)
+                    if !model.trendArrow.isEmpty {
+                        Text(model.trendArrow)
+                            .font(.system(size: 30, weight: .bold))
+                            .foregroundStyle(Color.primary.opacity(0.85))
+                    }
+                }
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                // Digits and arrows have no descenders and sit well below the
+                // ascender, so trim the empty line box: the number grows to
+                // the height of the two lines beside it without the row
+                // getting taller and squeezing the graph.
+                .padding(.vertical, -7)
+                .layoutPriority(2)
                 Spacer(minLength: 4)
                 VStack(alignment: .trailing, spacing: 0) {
                     if !model.isStale {
