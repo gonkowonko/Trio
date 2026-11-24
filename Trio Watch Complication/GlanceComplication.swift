@@ -277,10 +277,10 @@ struct GlanceContent: View {
 /// Three hours of readings across the full width, under the glucose line.
 ///
 /// Layout after another CGM app's watch complication Gary showed (2026-11-24):
-/// a thick line coloured in sections by Trio's own glucose colours, dashed rules at the low and high
-/// limits, faint vertical rules on the hour. The scale always includes both
-/// limits, so the rules are fixed landmarks and the line's height means the same
-/// thing every time you look.
+/// readings coloured by Trio's own glucose colours, the target range as a faint
+/// band (dashed rules at the limits until 2026-11-24), faint vertical rules on
+/// the hour. The scale always includes both limits, so the band is a fixed
+/// landmark and a reading's height means the same thing every time you look.
 ///
 /// Earlier versions on the right-hand half (dots, then a thin line, both fitted
 /// to the readings) were too narrow to read; see the GLANCE memory.
@@ -352,17 +352,19 @@ struct GlanceChart: View {
 
     private var chart: some View {
         Chart {
+            // Target range as a faint neutral band (option B, 2026-11-24), in place
+            // of dashed rules at the limits: less ink, and neutral rather than the
+            // Live Activity's green so in-range green dots keep their contrast.
+            RectangleMark(
+                yStart: .value("Low", band.lowerBound),
+                yEnd: .value("High", band.upperBound)
+            )
+            .foregroundStyle(Color.white.opacity(0.16))
             ForEach(hourMarks, id: \.self) { hour in
                 RuleMark(x: .value("Hour", hour))
                     .lineStyle(StrokeStyle(lineWidth: 1))
-                    .foregroundStyle(Color.white.opacity(0.18))
+                    .foregroundStyle(Color.white.opacity(0.20))
             }
-            RuleMark(y: .value("Low", band.lowerBound))
-                .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                .foregroundStyle(Color.white.opacity(0.45))
-            RuleMark(y: .value("High", band.upperBound))
-                .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                .foregroundStyle(Color.white.opacity(0.45))
 
             // Dots, one per reading, as on the Custom Live Activity. Thinned dots on
             // a half-width, zoomed chart read as random specks earlier; at full
