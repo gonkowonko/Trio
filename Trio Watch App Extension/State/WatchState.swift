@@ -889,6 +889,18 @@ import WidgetKit
         let known = Set(ownReadings.map { Int($0.dateString.timeIntervalSince1970 / 60) })
         ownReadings += readings.filter { !known.contains(Int($0.dateString.timeIntervalSince1970 / 60)) }
         ownReadings.sort { $0.dateString < $1.dateString }
+        // LOCAL: GLANCE-FRESH. The phone updates the application context after
+        // every loop, but with the watch reading the G7 itself no background
+        // refresh is scheduled (`WatchBackgroundRefresh.schedule`), so nothing
+        // picked that context up while the app was in the background. Complications
+        // then paired each new G7 reading with loop/IOB/COB 10-30 minutes old.
+        // This wake is happening anyway; read what's queued before the snapshot
+        // is saved. Older or already-seen contexts are dropped by the date checks
+        // in `acceptWatchStatePayload`, and `saveComplicationSnapshot` skips an
+        // unchanged snapshot, so this costs no extra complication reloads.
+        if let context = session?.receivedApplicationContext, !context.isEmpty {
+            acceptWatchStatePayload(context)
+        }
         applyOwnOverlay()
     }
 
@@ -1065,7 +1077,10 @@ extension WatchState {
             lastSavedComplicationState = snapshot
             reloadInstalledComplications()
             let readingAge = Int(Date().timeIntervalSince(latestReading.date) / 60)
-            WatchLogger.shared.info(.data, "Complication snapshot saved, reading \(readingAge) min old")
+            // LOCAL: GLANCE-FRESH. Loop age added so the watch log shows how far
+            // the phone's half of each snapshot trails the reading.
+            let loopAge = lastLoopDate.map { "\(Int(Date().timeIntervalSince($0) / 60)) min old" } ?? "unknown"
+            WatchLogger.shared.info(.data, "Complication snapshot saved, reading \(readingAge) min old, loop \(loopAge)")
         } catch {
             WatchLogger.shared.warning(.data, "Complication snapshot not saved", error: error)
         }
@@ -1104,7 +1119,19 @@ extension WatchState {
     }
 
     private func reloadInstalledComplications() {
-        complicationReloader.reload(Set(ComplicationKind.allCases.map(\.widgetKind)))
+        let kinds = ComplicationKind.allCases.map(\.widgetKind)
+        // LOCAL: RELOAD-NOW. `complicationReloader` asks WidgetKit which kinds are
+        // installed and only reloads them in the async callback. On a G7
+        // background wake the app can be suspended before that callback runs, so
+        // the snapshot was saved but no reload was ever requested: the watch app
+        // showed the new reading while the complication kept the old one (seen on
+        // device 2026-11-24, intermittent and drifting). Requesting the reloads
+        // synchronously, here, is done before this call returns. Reloading a kind
+        // that isn't on any face is a no-op. The PR's `ComplicationReloader` is
+        // left in place for its tests; to go back, restore the
+        // `complicationReloader.reload(Set(kinds))` call.
+        kinds.forEach { WidgetCenter.shared.reloadTimelines(ofKind: $0) }
+        WatchLogger.shared.debug(.data, "Complication reload requested for \(kinds.count) kinds")
     }
 
     private func complicationHistory(until end: Date) -> [ComplicationPoint] {
