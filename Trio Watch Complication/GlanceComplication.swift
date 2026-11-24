@@ -217,9 +217,14 @@ struct GlanceContent: View {
             // device 2026-11-24), so the number now clearly leads.
             HStack(alignment: .center, spacing: 6) {
                 Text(model.glucoseWithArrow)
-                    .font(.system(size: 40, weight: .bold))
+                    .font(.system(size: 50, weight: .bold))
                     .foregroundStyle(glucoseColor)
                     .minimumScaleFactor(0.6)
+                    // Digits and arrows have no descenders and sit well below the
+                    // ascender, so trim the empty line box: the number grows to
+                    // the height of the two lines beside it without the row
+                    // getting taller and squeezing the graph.
+                    .padding(.vertical, -7)
                     .layoutPriority(2)
                 Spacer(minLength: 4)
                 VStack(alignment: .trailing, spacing: 0) {
