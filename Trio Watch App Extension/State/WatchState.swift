@@ -909,9 +909,9 @@ import WidgetKit
         applyOwnOverlay()
     }
 
-    /// The watch's own newest reading is shown while it is fresh (`ownReadingFreshFor`), or while it is newer than the
-    /// phone's; otherwise the phone's readings stand as sent. The chart is the watch's own readings, the phone's where
-    /// the watch has none. Idempotent: built each time from the phone's copy and the watch's own.
+    /// The watch's own newest reading is shown while it is fresh (`ownReadingFreshFor`) and the phone has nothing newer,
+    /// or while it is newer than the phone's; otherwise the phone's readings stand as sent. The chart is the watch's own
+    /// readings, the phone's where the watch has none. Idempotent: built each time from the phone's copy and the watch's own.
     private func applyOwnOverlay(now: Date = Date()) {
         // the watch's own reading gives way to the phone's once it is no longer fresh
         defer {
@@ -922,9 +922,16 @@ import WidgetKit
         let range = glucoseRange
         let own = ownReadings.compactMap { reading in (reading.glucose ?? reading.sgv).map { (reading, $0) } }
         let phoneNewest = phoneNewestReading ?? .distantPast
+        // LOCAL: OWN-YIELDS-NEWER. A fresh own reading also gives way when the phone
+        // already holds a newer one. The phone's state often lands a moment before
+        // the watch's own G7 link delivers the same new reading; the older own
+        // reading then went into a complication snapshot, WidgetKit redrew with it,
+        // and dropped the reload for the new reading 0.4 s later, so the
+        // complication sat 5 minutes behind (watch log 2026-11-24 16:20, 16:50).
         guard let (latest, value) = own.last,
               now.timeIntervalSince(latest.dateString) < Self.ownReadingFreshFor ||
-              latest.dateString > phoneNewest.addingTimeInterval(60)
+              latest.dateString > phoneNewest.addingTimeInterval(60),
+              latest.dateString > phoneNewest.addingTimeInterval(-60)
         else {
             showPhoneReadings()
             return
