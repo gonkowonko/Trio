@@ -22,7 +22,14 @@ import WatchKit
     /// For the glucose bubble.
     private(set) var isReadingDirectly = false
     /// The watch's link to the sensor is up: the radio waves of the left indicator.
-    private(set) var isTalkingToSensor = false
+    private(set) var isTalkingToSensor = false {
+        // LOCAL: HOLD-FOR-READING. Complication reloads wait for this link's reading.
+        didSet {
+            guard isTalkingToSensor != oldValue else { return }
+            WatchState.shared.sensorLinkChanged(isUp: isTalkingToSensor)
+        }
+    }
+
     private(set) var sensorStateText: String?
     /// After the reading's age while the loop is on time: a state that needs nothing done.
     private(set) var sensorNote: String?

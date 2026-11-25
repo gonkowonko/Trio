@@ -885,7 +885,43 @@ import WidgetKit
     // MARK: - The watch's own sensor readings
 
     /// Readings from the watch's own sensor link: shown first, the phone's only while these are not fresh.
+
+    // MARK: LOCAL: HOLD-FOR-READING
+
+    /// While the watch's G7 link is up and its reading hasn't arrived yet, complication
+    /// reloads wait for it. A G7 wake often brings an update from the phone (queued loop
+    /// data) a fraction of a second before the reading; its reload made WidgetKit redraw
+    /// with the old reading and then ignore the reload for the new one, so complications
+    /// sat a reading behind (watch log 2026-11-24 16:20, 16:50, 18:40). Snapshots are
+    /// still saved meanwhile; one reload goes out when the reading lands or the link
+    /// closes without one. To take this out, delete this section, the call in
+    /// `applyOwnReadings`, the guard at the top of `reloadInstalledComplications` and the
+    /// `didSet` on `WatchCGMHost.isTalkingToSensor`.
+    private var sensorLinkOpenedAt: Date?
+    private var reloadHeldForReading = false
+    /// A link that never reports closing (the app suspended mid-link) stops holding after this.
+    private static let readingHoldLimit: TimeInterval = 10
+
+    func sensorLinkChanged(isUp: Bool) {
+        sensorLinkOpenedAt = isUp ? Date() : nil
+        if !isUp { releaseHeldReload(reason: "the link closed without a reading") }
+    }
+
+    private var isAwaitingSensorReading: Bool {
+        guard let opened = sensorLinkOpenedAt else { return false }
+        return Date().timeIntervalSince(opened) < Self.readingHoldLimit
+    }
+
+    private func releaseHeldReload(reason: String) {
+        guard reloadHeldForReading else { return }
+        WatchLogger.shared.debug(.data, "Held complication reload sent: \(reason)")
+        reloadInstalledComplications()
+    }
+
     func applyOwnReadings(_ readings: [BloodGlucose]) {
+        // HOLD-FOR-READING: this is the reading the link was opened for.
+        sensorLinkOpenedAt = nil
+        defer { releaseHeldReload(reason: "the reading arrived") }
         let known = Set(ownReadings.map { Int($0.dateString.timeIntervalSince1970 / 60) })
         ownReadings += readings.filter { !known.contains(Int($0.dateString.timeIntervalSince1970 / 60)) }
         ownReadings.sort { $0.dateString < $1.dateString }
@@ -1150,6 +1186,15 @@ extension WatchState {
     }
 
     private func reloadInstalledComplications() {
+        // HOLD-FOR-READING: wait for the reading a G7 link is about to deliver.
+        if isAwaitingSensorReading {
+            if !reloadHeldForReading {
+                WatchLogger.shared.debug(.data, "Complication reload held for the G7 reading")
+            }
+            reloadHeldForReading = true
+            return
+        }
+        reloadHeldForReading = false
         // GLANCE: the Glance complication isn't a ComplicationKind; its kind
         // string lives in GlanceComplication.swift (complication target only).
         let kinds = ComplicationKind.allCases.map(\.widgetKind)
