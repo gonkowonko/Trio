@@ -316,12 +316,8 @@ private struct GarminRemoteOverridePicker: View {
             return "\(target.decimalValue.formatted(for: units)) \(units.rawValue)"
         }()
 
-        let smbString: String = {
-            guard preset.smbIsOff || preset.smbIsScheduledOff else { return "" }
-            let schedule = preset.smbIsScheduledOff && preset.start != preset.end
-                ? " \(formatTimeRange(start: preset.start?.stringValue, end: preset.end?.stringValue))" : ""
-            return "SMBs Off\(schedule)"
-        }()
+        // As the Adjustments screen, since upstream PR 1760 replaced formatTimeRange
+        let smbString = preset.smbOffText
 
         let smbMinutes = preset.smbMinutes?.decimalValue ?? 0
         let maxSmbMinsString = smbMinutes != 0 && preset.advancedSettings && !preset.smbIsOff && smbMinutes != defaultSmbMinutes
