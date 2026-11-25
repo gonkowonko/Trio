@@ -12,8 +12,9 @@ import WidgetKit
 // can't wake the watch. The phone's contact-image complication carries them
 // instead, since the phone redraws that as soon as it loops.
 //
-// To remove it, delete this file and the two `GLANCE` lines (the bundle entry
-// in TrioWatchComplication.swift and the reload kind in WatchState.swift).
+// To remove it, delete this file, the `GLANCE` bundle entry in
+// TrioWatchComplication.swift and GlanceDirectFeed.swift with its call in
+// WatchCGMHost (GLANCE-DIRECT).
 
 enum GlanceComplication {
     /// Also listed in `WatchState.reloadInstalledComplications()`; the two must match.
@@ -40,7 +41,7 @@ struct GlanceProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (GlanceEntry) -> Void) {
-        guard !context.isPreview, let state = ComplicationStore.load() else {
+        guard !context.isPreview, let state = GlanceDirectStore.load() else {
             completion(GlanceEntry(date: Date(), state: Self.sample, isPlaceholder: context.isPreview))
             return
         }
@@ -49,7 +50,7 @@ struct GlanceProvider: TimelineProvider {
 
     func getTimeline(in _: Context, completion: @escaping (Timeline<GlanceEntry>) -> Void) {
         let now = Date()
-        guard let state = ComplicationStore.load() else {
+        guard let state = GlanceDirectStore.load() else {
             completion(Timeline(entries: [GlanceEntry(date: now, state: .placeholder, isPlaceholder: true)], policy: .never))
             return
         }
@@ -70,6 +71,20 @@ struct GlanceProvider: TimelineProvider {
 
     static var sample: ComplicationState {
         ComplicationState.sample(units: ComplicationStore.load()?.units ?? ComplicationState.defaultUnits)
+    }
+}
+
+/// LOCAL: GLANCE-DIRECT. Glance draws only what the watch's own G7 link saved
+/// (`GlanceDirectFeed` in the watch app), never the shared complication snapshot
+/// the phone's updates write. To go back, use `ComplicationStore.load()` in
+/// `GlanceProvider`.
+enum GlanceDirectStore {
+    /// Also `GlanceDirectFeed.stateKey`; the strings must match.
+    static let key = "GlanceDirect.state"
+
+    static func load() -> ComplicationState? {
+        ComplicationStore.defaults?.data(forKey: key)
+            .flatMap { try? JSONDecoder().decode(ComplicationState.self, from: $0) }
     }
 }
 

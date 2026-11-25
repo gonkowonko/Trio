@@ -206,6 +206,7 @@ extension WatchCGMHost: CGMManagerDelegate {
                 guard !readings.isEmpty else { return }
                 WatchLogger.shared.info(.data, "Direct reading: \(readings.count) sample(s)")
                 updateStatus()
+                GlanceDirectFeed.shared.receive(readings) // GLANCE-DIRECT
                 WatchState.shared.applyOwnReadings(readings)
                 WatchAlarms.shared.check(own: readings)
                 scheduleAcquisitionBackstop()

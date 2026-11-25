@@ -1207,10 +1207,10 @@ extension WatchState {
             return
         }
         reloadHeldForReading = false
-        // GLANCE: the Glance complication isn't a ComplicationKind; its kind
-        // string lives in GlanceComplication.swift (complication target only).
+        // GLANCE-DIRECT: Glance is no longer reloaded from here; `GlanceDirectFeed`
+        // reloads it once per watch G7 reading. To go back, add
+        // `+ ["TrioGlanceComplication"]` here.
         let kinds = ComplicationKind.allCases.map(\.widgetKind)
-            + ["TrioGlanceComplication"] // GLANCE
         // LOCAL: RELOAD-NOW. `complicationReloader` asks WidgetKit which kinds are
         // installed and only reloads them in the async callback. On a G7
         // background wake the app can be suspended before that callback runs, so
