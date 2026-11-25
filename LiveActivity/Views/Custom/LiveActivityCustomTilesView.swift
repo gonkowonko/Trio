@@ -66,11 +66,20 @@ struct LiveActivityCustomTilesView: View {
         Self.decimals.string(from: value as NSNumber) ?? "--"
     }
 
+    /// IOB as the app shows it since upstream PR 1731 (`Decimal.formattedIOB()`, which this
+    /// extension can't see): rounded to two decimals first, so -0.004 reads "0", not "-0".
+    private func iobNumber(_ value: Decimal) -> String {
+        var input = value
+        var rounded = Decimal()
+        NSDecimalRound(&rounded, &input, 2, .plain)
+        return rounded.formatted(.number.precision(.fractionLength(0 ... 2)))
+    }
+
     var body: some View {
         HStack(spacing: 0) {
             LiveActivityCustomTile(
                 symbol: "syringe.fill",
-                value: number(iob) + " " + String(localized: "U", comment: "Insulin unit"),
+                value: iobNumber(iob) + " " + String(localized: "U", comment: "Insulin unit"),
                 caption: String(localized: "IOB", comment: "Insulin on board, Custom Live Activity tile"),
                 tint: LiveActivityCustomPalette.insulin
             )

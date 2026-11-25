@@ -121,11 +121,8 @@ extension Home.RootView {
             headerReadoutPill(
                 iconSystemName: "syringe.fill",
                 iconColor: Color.insulin,
-                text: (
-                    Formatter.decimalFormatterWithTwoFractionDigits
-                        .string(from: state.currentIOB as NSNumber) ?? "0"
-                ) +
-                    String(localized: " U", comment: "Insulin unit")
+                // upstream PR 1731's shared IOB format: rounded first, no "-0"
+                text: state.currentIOB.formattedIOB() + String(localized: " U", comment: "Insulin unit")
             )
 
             headerReadoutPill(
