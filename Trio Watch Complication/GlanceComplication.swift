@@ -96,6 +96,9 @@ enum GlancePalette {
     static let red = Color(red: 0.922, green: 0.341, blue: 0.341)
     static let amber = Color(red: 0.98, green: 0.72, blue: 0.24)
     static let yellow = Color(red: 0.949, green: 0.788, blue: 0.298)
+    /// Small text grey. PR 1809 dropped `ComplicationModel.dimText` (its complications now
+    /// draw small text white); Glance keeps the grey it was tuned with on device.
+    static let dim = Color(white: 0.8)
 
     /// Red under the low limit, yellow over the high one, green between.
     static func glucose(_ value: Double, band: ClosedRange<Double>) -> Color {
@@ -269,7 +272,7 @@ struct GlanceContent: View {
                         .font(.system(size: 16, weight: .medium))
                         .monospacedDigit()
                         .foregroundStyle(
-                            model.isStale ? (model.fullColor ? GlancePalette.amber : .primary) : model.dimColor
+                            model.isStale ? (model.fullColor ? GlancePalette.amber : .primary) : GlancePalette.dim
                                 .opacity(0.85)
                         )
                 }
@@ -358,7 +361,7 @@ struct GlanceChart: View {
         } else {
             Text("no data")
                 .font(.system(size: 11))
-                .foregroundStyle(ComplicationModel.dimText)
+                .foregroundStyle(GlancePalette.dim)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
