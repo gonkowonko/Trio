@@ -985,7 +985,19 @@ import WidgetKit
         currentGlucoseColorString = inRange ? "#ffffff" : range.color(value).toHexString()
         trend = latest.direction?.rawValue
         if glucoseValues.count >= 2 {
-            let change = glucoseValues[glucoseValues.count - 1].glucose - glucoseValues[glucoseValues.count - 2].glucose
+            var change = glucoseValues[glucoseValues.count - 1].glucose - glucoseValues[glucoseValues.count - 2].glucose
+            // LOCAL: DELTA-MGDL. Subtract in mg/dL and convert the difference, as the phone does
+            // (CurrentGlucoseView.delta). Subtracting two readings already rounded to 0.1 mmol/L
+            // could be 0.1 off: 113 and 96 mg/dL showed +1.0 on the watch, +0.9 on the phone
+            // (2026-11-25). Only when the previous reading is the watch's own too, so its mg/dL
+            // is known; otherwise as before.
+            let previousDate = glucoseValues[glucoseValues.count - 2].date
+            if own.count >= 2, abs(own[own.count - 2].0.dateString.timeIntervalSince(previousDate)) < 1 {
+                let changeMgdl = value - own[own.count - 2].1
+                change = range.isMmol
+                    ? NSDecimalNumber(decimal: Decimal(changeMgdl).asMmolL).doubleValue
+                    : Double(changeMgdl)
+            }
             let formatted = range.isMmol ? String(format: "%.1f", change) : String(format: "%.0f", change)
             delta = change < 0 ? formatted : "+" + formatted
         }
