@@ -195,6 +195,10 @@ enum ContactImageLayout: String, JSON, CaseIterable, Identifiable, Codable {
     case `default`
     case split
     case bobble
+    // LOCAL: LOOP-CONTACT. A phone icon coloured by loop state over the last loop
+    // time, drawn by `LoopStatusContactView`. To remove: delete this case and that
+    // file, then the `.loopStatus` lines in ContactPicture and the two settings views.
+    case loopStatus
 
     var displayName: String {
         switch self {
@@ -204,7 +208,18 @@ enum ContactImageLayout: String, JSON, CaseIterable, Identifiable, Codable {
             return String(localized: "Split", comment: "")
         case .bobble:
             return String(localized: "Glucose Bobble", comment: "")
+        case .loopStatus:
+            return String(
+                localized: "Loop Status",
+                comment: "Contact image layout: phone icon coloured by loop state, with the last loop time"
+            )
         }
+    }
+
+    /// Bobble and Loop Status draw their own fixed design, so the value, ring, font
+    /// and high-contrast settings don't apply to them.
+    var usesCustomValues: Bool {
+        self != .bobble && self != .loopStatus
     }
 }
 

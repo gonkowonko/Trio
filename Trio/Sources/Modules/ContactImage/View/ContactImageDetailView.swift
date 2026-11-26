@@ -62,7 +62,7 @@ struct ContactImageDetailView: View {
                         }
                     })
 
-                    if contactImageEntry.layout != .bobble {
+                    if contactImageEntry.layout.usesCustomValues {
                         Toggle("High Contrast Mode", isOn: $contactImageEntry.hasHighContrast)
                     }
                 }.listRowBackground(Color.chart)
@@ -75,7 +75,19 @@ struct ContactImageDetailView: View {
                     }.listRowBackground(Color.chart)
                 }
 
-                if contactImageEntry.layout != .bobble {
+                // LOOP-CONTACT: the icon colour and time are fixed; only the background applies.
+                if contactImageEntry.layout == .loopStatus {
+                    Section(
+                        header: Text("Loop Status Options"),
+                        footer: Text(
+                            "A phone icon coloured by loop state (green, amber, red, as the Home loop pill) above the time the loop last ran."
+                        )
+                    ) {
+                        backgroundModePicker
+                    }.listRowBackground(Color.chart)
+                }
+
+                if contactImageEntry.layout.usesCustomValues {
                     Section(header: Text("Display Values")) {
                         Picker("Top Value", selection: $contactImageEntry.top) {
                             ForEach(ContactImageValue.allCases, id: \.id) { value in

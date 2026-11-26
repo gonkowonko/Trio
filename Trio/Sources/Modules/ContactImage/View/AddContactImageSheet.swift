@@ -97,7 +97,7 @@ struct AddContactImageSheet: View {
                                 top = .none
                             }
                         })
-                        if layout != .bobble {
+                        if layout.usesCustomValues {
                             Toggle("High Contrast Mode", isOn: $hasHighContrast)
                         }
                     }.listRowBackground(Color.chart)
@@ -110,7 +110,19 @@ struct AddContactImageSheet: View {
                         }.listRowBackground(Color.chart)
                     }
 
-                    if layout != .bobble {
+                    // LOOP-CONTACT: the icon colour and time are fixed; only the background applies.
+                    if layout == .loopStatus {
+                        Section(
+                            header: Text("Loop Status Options"),
+                            footer: Text(
+                                "A phone icon coloured by loop state (green, amber, red, as the Home loop pill) above the time the loop last ran."
+                            )
+                        ) {
+                            backgroundModePicker
+                        }.listRowBackground(Color.chart)
+                    }
+
+                    if layout.usesCustomValues {
                         // Primary Value Section
                         Section(header: Text("Display Values")) {
                             Picker("Top Value", selection: $top) {

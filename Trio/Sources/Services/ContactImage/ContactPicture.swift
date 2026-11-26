@@ -44,7 +44,9 @@ struct ContactPicture: View {
             let ringGap = Double(contact.ringGap.rawValue) / 100.0
             let outerGap = 0.03
 
-            if contact.ring != .none {
+            // LOOP-CONTACT: Loop Status draws its own design; a ring left set from
+            // another layout would otherwise be drawn around it.
+            if contact.ring != .none, contact.layout != .loopStatus {
                 rect = CGRect(
                     x: rect.minX + width * outerGap,
                     y: rect.minY + height * outerGap,
@@ -187,6 +189,12 @@ struct ContactPicture: View {
                     width: bobbleSize,
                     height: bobbleSize
                 ))
+
+            case .loopStatus:
+                // LOOP-CONTACT: sized like the bobble, from the remaining rect.
+                let size = min(rect.width, rect.height)
+                let image = makeLoopStatusImage(state: state, pixelSize: size)
+                image.draw(in: CGRect(x: rect.midX - size / 2, y: rect.midY - size / 2, width: size, height: size))
 
             case .split:
                 let centerX = rect.origin.x + rect.size.width / 2
@@ -425,6 +433,25 @@ struct ContactPicture: View {
 
         let renderer = ImageRenderer(content: view)
         renderer.scale = pixelSize / GlucoseBobbleContactView.Layout.nativeSize
+        renderer.isOpaque = false
+        return renderer.uiImage ?? UIImage()
+    }
+
+    /// LOCAL: LOOP-CONTACT. Same classifier and inputs as `ringColor`, and the same time
+    /// format as the "Last Loop Time" value.
+    private static func makeLoopStatusImage(state: ContactImageState, pixelSize: CGFloat) -> UIImage {
+        let freshness = LoopFreshness.classify(
+            lastLoopDate: state.lastLoopDate,
+            now: Date(),
+            closedLoop: state.closedLoop,
+            manualTempBasal: state.manualTempBasal
+        )
+        let view = LoopStatusContactView(
+            freshness: freshness,
+            lastLoopText: state.lastLoopDate?.formatted(.timeOfDay.hour(.defaultDigits(amPM: .omitted)))
+        )
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = pixelSize / LoopStatusContactView.Layout.nativeSize
         renderer.isOpaque = false
         return renderer.uiImage ?? UIImage()
     }

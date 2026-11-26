@@ -28,6 +28,10 @@ struct ContactImageHelpView: View {
                     Text("• Default: Single 'primary' value with up to two smaller values ('Top', 'Bottom') above and below it.")
                     Text("• Split: Divides values into two separate areas of same size.")
                     Text("• Glucose Bobble: Mirrors the glucose HUD, colored by glucose value with a trend arrow.")
+                    // LOOP-CONTACT
+                    Text(
+                        "• Loop Status: A phone icon colored by loop state, as the Home loop pill, above the time the loop last ran. Only the background can be changed."
+                    )
                 }).listRowBackground(Color.gray.opacity(0.1))
 
                 DefinitionRow(term: String(localized: "Glucose Bobble Options"), definition: VStack(alignment: .leading) {
