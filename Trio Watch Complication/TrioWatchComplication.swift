@@ -309,6 +309,7 @@ struct TrioWatchComplication: Widget {
         TrioLoopComplication()
         TrioGlanceComplication() // GLANCE
         TrioGlanceIobCobComplication() // GLANCE-IOBCOB
+        TrioGlanceLoopComplication() // GLANCE-LOOP
         TrioWatchComplication()
     }
 }
