@@ -423,7 +423,8 @@ struct TrioGlanceComplication: Widget {
         StaticConfiguration(kind: GlanceComplication.kind, provider: GlanceProvider()) { entry in
             GlanceEntryView(entry: entry)
         }
-        .configurationDisplayName(String(localized: "Trio Glance", comment: "Name of the glance watch complication"))
+        // GLANCE-IOBCOB: was "Trio Glance"; the display name only, so faces keep it.
+        .configurationDisplayName(String(localized: "Trio Glance Chart", comment: "Name of the glance watch complication"))
         .description(String(
             localized: "Large glucose with trend, delta and reading age, and the last three hours beside it, straight from the sensor.",
             comment: "Description of the glance watch complication"

@@ -147,7 +147,8 @@ final class ComplicationSettle {
     /// by the previous call and asks WidgetKit for a fresh one for next time. A kind just
     /// added to a face draws itself when added, and is in the list from the next reload.
     func installedKinds() -> [String] {
-        let all = ComplicationKind.allCases.map(\.widgetKind)
+        // GLANCE-IOBCOB: its kind (`GlanceIobCob.kind`, in the complication extension).
+        let all = ComplicationKind.allCases.map(\.widgetKind) + ["TrioGlanceIobCobComplication"]
         WidgetCenter.shared.getCurrentConfigurations { result in
             guard let configurations = try? result.get() else { return }
             let installed = Set(configurations.map(\.kind))
