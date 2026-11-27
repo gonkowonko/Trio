@@ -2,8 +2,8 @@ import SwiftUI
 import WidgetKit
 
 /// LOCAL: GLANCE-IOBCOB (27 Nov). "Trio Glance IOB/COB": IOB over COB, the same size, in
-/// the contact image's colours (insulin blue, loop yellow), each with the watch app's icon (syringe, fork and knife). A
-/// plainer round alternative to the PR's "Trio IOB", which has a label, the value and a
+/// the contact image's colours (insulin blue, loop yellow), with small units and a divider;
+/// a zero value goes grey (mock-up option B). A plainer round alternative to the PR's "Trio IOB", which has a label, the value and a
 /// status line. Unlike Glance it draws the phone's data, so it reads the shared snapshot
 /// (`ComplicationStore`) and is reloaded with the shared complications by WATCH-SETTLE
 /// (its kind is in `ComplicationSettle.installedKinds`).
@@ -81,41 +81,50 @@ struct GlanceIobCobContent: View {
     let fullColor: Bool
 
     enum Layout {
-        // 27 Nov sim (46 mm): with icons, "1.85" only fitted at 15 pt, too small to
-        // glance at; the colours already say which is which, so the icons are off
-        // and the numbers take the width.
-        static let showsIcons = false
-        static let valueSize: CGFloat = 20
-        static let iconSize: CGFloat = 9
-        static let iconGap: CGFloat = 2
-        static let rowGap: CGFloat = -2
+        // 27 Nov: option B of the mock-ups. Small units and a hairline divider; a zero
+        // or missing value goes grey so the eye lands on what is active. Icons (tried
+        // first) only fitted with 15 pt numbers and read as clutter.
+        static let valueSize: CGFloat = 15
+        static let unitSize: CGFloat = 7
+        static let dividerWidth: CGFloat = 26
+        static let rowGap: CGFloat = 1
+        static let maxRowWidth: CGFloat = 40
     }
+
+    private static let grey = Color(white: 0.55)
 
     var body: some View {
         VStack(spacing: Layout.rowGap) {
-            row(symbol: "syringe.fill", value: iob, color: GlanceIobCob.insulinBlue)
-            row(symbol: "fork.knife", value: cob, color: GlanceIobCob.carbAmber)
+            row(value: iob, unit: "U", color: GlanceIobCob.insulinBlue)
+            Rectangle()
+                .fill(Color.white.opacity(0.22))
+                .frame(width: Layout.dividerWidth, height: 0.75)
+            row(value: cob, unit: "g", color: GlanceIobCob.carbAmber)
         }
-        .padding(.horizontal, 4)
     }
 
-    private func row(symbol: String, value: String, color: Color) -> some View {
-        let tint = fullColor ? color : Color.primary
-        return HStack(spacing: Layout.iconGap) {
-            if Layout.showsIcons {
-                Image(systemName: symbol)
-                    .font(.system(size: Layout.iconSize, weight: .bold))
-                    .foregroundStyle(tint)
-                    .widgetAccentable()
-            }
+    private static func isInactive(_ value: String) -> Bool {
+        value == ComplicationState.missingValue || (Double(value) ?? 1) == 0
+    }
+
+    private func row(value: String, unit: String, color: Color) -> some View {
+        let inactive = Self.isInactive(value)
+        let tint = !fullColor ? Color.primary : inactive ? Self.grey : color
+        return HStack(alignment: .firstTextBaseline, spacing: 1) {
             Text(value)
                 .font(.system(size: Layout.valueSize, weight: .bold, design: .rounded))
                 .monospacedDigit()
-                .foregroundStyle(tint)
-                .minimumScaleFactor(0.6)
-                .lineLimit(1)
-                .widgetAccentable()
+            if value != ComplicationState.missingValue {
+                Text(unit)
+                    .font(.system(size: Layout.unitSize, weight: .semibold, design: .rounded))
+                    .opacity(0.7)
+            }
         }
+        .foregroundStyle(tint)
+        .minimumScaleFactor(0.6)
+        .lineLimit(1)
+        .frame(maxWidth: Layout.maxRowWidth)
+        .widgetAccentable()
     }
 }
 
