@@ -15,7 +15,8 @@ import WidgetKit
 /// The rules:
 /// 1. A new reading waits up to `settleLimit` for its loop, then sends one reload. If it
 ///    timed out, the reading's loop still gets one reload if it lands within
-///    `lateLoopWindow`, while the watch is still awake.
+///    `lateLoopWindow`, while the watch is still awake. A timeout that only runs minutes
+///    later, because the app was suspended, is skipped (LATE-TIMEOUT).
 /// 2. While readings are arriving, nothing else reloads. watchOS held such reloads until
 ///    the next wake and ran them before the new reading was saved, so they drew the old
 ///    reading and cost the real one (watch log 26 Nov 10:52-11:10). The next reading is
@@ -42,6 +43,8 @@ final class ComplicationSettle {
     private static let newReadingGap: TimeInterval = 30
     /// Readings are 5 min apart; past this one has been missed.
     private static let readingsStalledAfter: TimeInterval = 6 * 60
+    /// A timeout this much past `settleLimit` ran late, after the app was suspended.
+    private static let lateTimeoutGrace: TimeInterval = 30
 
     private var settleReadingDate: Date?
     private var settleStartedAt: Date?
@@ -124,10 +127,27 @@ final class ComplicationSettle {
     private func finishSettle(reason: String) {
         guard let reading = settleReadingDate else { return }
         let timedOut = !reason.hasPrefix("the loop")
+        let waited = settleStartedAt.map { Date().timeIntervalSince($0) } ?? 0
         settleReadingDate = nil
         settleStartedAt = nil
         settleTimeout?.cancel()
         settleTimeout = nil
+
+        // LATE-TIMEOUT (27 Nov): a timeout that runs minutes late means the app was
+        // suspended; it runs at the next wake, as the next reading lands. Its reload drew
+        // at once with the old loop (07:39:58 drew the 07:29:59 loop, 10.5 min old, so the
+        // Loop complication went red until 07:45) and spent the redraw the new reading
+        // needed. Skip it: the new reading starts its own cycle and brings the loop.
+        if timedOut, waited > Self.settleLimit + Self.lateTimeoutGrace {
+            timedOutReading = nil
+            timedOutAt = nil
+            WatchLogger.shared.info(
+                .data,
+                "Complication reload skipped, the timeout ran \(Int(waited)) s after the cycle started (app was asleep)"
+            )
+            return
+        }
+
         timedOutReading = timedOut ? reading : nil
         timedOutAt = timedOut ? Date() : nil
         WatchLogger.shared.info(
