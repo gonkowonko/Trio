@@ -27,6 +27,9 @@ struct TrioGlucoseEntry: TimelineEntry {
 }
 
 struct TrioGlucoseProvider: TimelineProvider {
+    /// WATCH-SETTLE: which complication this provider draws, for `ComplicationRedrawLog`.
+    var kind: ComplicationKind?
+
     private static let timelineStep: TimeInterval = 5 * 60
     private static let timelineSpan: TimeInterval = 2 * 60 * 60
 
@@ -56,6 +59,7 @@ struct TrioGlucoseProvider: TimelineProvider {
             + state.staleTransitionDates(after: now, within: Self.timelineSpan)
             + state.loopFreshnessTransitionDates(after: now, within: Self.timelineSpan)
         let entries = dates.sorted().map { TrioGlucoseEntry(date: $0, content: current.content) }
+        if let kind { ComplicationRedrawLog.record(kind: kind.rawValue, builtAt: now, state: state) } // WATCH-SETTLE
         completion(Timeline(entries: entries, policy: .atEnd))
     }
 
@@ -145,8 +149,30 @@ private func families(for kind: ComplicationKind) -> [WidgetFamily] {
     }
 }
 
+/// LOCAL: WATCH-SETTLE. Notes each timeline a shared complication builds, with the reading
+/// and loop it drew, in the app group; `WatchState.logComplicationRedraws` writes them to
+/// the watch log. Diagnostic only: delete this and its call in `getTimeline` once settled.
+enum ComplicationRedrawLog {
+    static let key = "WatchSettle.redraws"
+    private static let limit = 120
+
+    static func record(kind: String, builtAt: Date, state: ComplicationState) {
+        guard let defaults = ComplicationStore.defaults else { return }
+        var notes = defaults.array(forKey: key) as? [[String: Any]] ?? []
+        var note: [String: Any] = [
+            "k": kind,
+            "b": builtAt.timeIntervalSince1970,
+            "r": state.date.timeIntervalSince1970
+        ]
+        if let loop = state.loopDate { note["l"] = loop.timeIntervalSince1970 }
+        notes.append(note)
+        defaults.set(Array(notes.suffix(limit)), forKey: key)
+    }
+}
+
 private func complicationConfiguration(for kind: ComplicationKind) -> some WidgetConfiguration {
-    StaticConfiguration(kind: kind.widgetKind, provider: TrioGlucoseProvider()) { entry in
+    StaticConfiguration(kind: kind.widgetKind, provider: TrioGlucoseProvider(kind: kind)) { entry in
+        // WATCH-SETTLE: kind for the redraw log
         TrioComplicationEntryView(kind: kind, entry: entry)
     }
     .configurationDisplayName(kind.displayName)

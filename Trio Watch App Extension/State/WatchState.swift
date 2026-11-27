@@ -127,6 +127,8 @@ import WidgetKit
     /// Temporary storage for new data arriving via WatchConnectivity.
     private var pendingData: [String: Any] = [:]
     private var lastSavedComplicationState: ComplicationState?
+    // LOCAL: WATCH-SETTLE. When the shared complications reload (ComplicationSettle.swift).
+    @ObservationIgnored private let complicationSettle = ComplicationSettle()
     private static let maxComplicationHistoryPoints = 40.0
 
     /// Work item to schedule finalizing the pending data.
@@ -914,6 +916,11 @@ import WidgetKit
 
     private func releaseHeldReload(reason: String) {
         guard reloadHeldForReading else { return }
+        // WATCH-SETTLE: a reading waiting for its loop sends its own reload.
+        if complicationSettle.isWaitingForLoop {
+            reloadHeldForReading = false
+            return
+        }
         WatchLogger.shared.debug(.data, "Held complication reload sent: \(reason)")
         reloadInstalledComplications()
     }
@@ -1125,13 +1132,18 @@ extension WatchState {
 
     private func saveComplicationSnapshot() {
         logGlanceRedraws()
+        logComplicationRedraws() // WATCH-SETTLE
         guard let latestReading = shownReading else { return }
         let snapshot = complicationSnapshot(readingDate: latestReading.date, glucoseValue: latestReading.glucose)
         guard snapshot != lastSavedComplicationState else { return }
         do {
             try ComplicationStore.save(snapshot)
+            let previous = lastSavedComplicationState
             lastSavedComplicationState = snapshot
-            reloadInstalledComplications()
+            // WATCH-SETTLE: was `reloadInstalledComplications()` on every save.
+            complicationSettle.snapshotSaved(snapshot, previous: previous) { [weak self] in
+                self?.reloadInstalledComplications()
+            }
             let readingAge = Int(Date().timeIntervalSince(latestReading.date) / 60)
             // LOCAL: GLANCE-FRESH. Loop age added so the watch log shows how far
             // the phone's half of each snapshot trails the reading.
@@ -1161,6 +1173,30 @@ extension WatchState {
             WatchLogger.shared.info(
                 .data,
                 "Glance redrew at \(clock.string(from: built)) with the \(clock.string(from: reading)) reading, \(lag) s after it"
+            )
+        }
+    }
+
+    /// LOCAL: WATCH-SETTLE redraw log. The shared complications note each timeline they
+    /// build (`ComplicationRedrawLog` in TrioWatchComplication.swift); this writes them to
+    /// the log, so a day's log shows whether each one kept up with readings and loops.
+    private func logComplicationRedraws() {
+        let key = "WatchSettle.redraws"
+        guard let defaults = ComplicationStore.defaults,
+              let notes = defaults.array(forKey: key) as? [[String: Any]], !notes.isEmpty
+        else { return }
+        defaults.removeObject(forKey: key)
+        let clock = DateFormatter()
+        clock.dateFormat = "HH:mm:ss"
+        for note in notes {
+            guard let kind = note["k"] as? String, let built = note["b"] as? Double, let reading = note["r"] as? Double
+            else { continue }
+            let loop = (note["l"] as? Double).map { clock.string(from: Date(timeIntervalSince1970: $0)) } ?? "no"
+            WatchLogger.shared.info(
+                .data,
+                "Complication \(kind) redrew at \(clock.string(from: Date(timeIntervalSince1970: built))) with the "
+                    + "\(clock.string(from: Date(timeIntervalSince1970: reading))) reading and the \(loop) loop, "
+                    + "\(Int(built - reading)) s after the reading"
             )
         }
     }
@@ -1210,7 +1246,8 @@ extension WatchState {
         // GLANCE-DIRECT: Glance is no longer reloaded from here; `GlanceDirectFeed`
         // reloads it once per watch G7 reading. To go back, add
         // `+ ["TrioGlanceComplication"]` here.
-        let kinds = ComplicationKind.allCases.map(\.widgetKind)
+        // WATCH-SETTLE rule 4: only the kinds on a face; was `ComplicationKind.allCases`.
+        let kinds = complicationSettle.installedKinds()
         // LOCAL: RELOAD-NOW. `complicationReloader` asks WidgetKit which kinds are
         // installed and only reloads them in the async callback. On a G7
         // background wake the app can be suspended before that callback runs, so
